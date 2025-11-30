@@ -130,32 +130,30 @@ class ModerationView(discord.ui.View):
         self.applicant_id = applicant_id
         self.taken = False
     
-@discord.ui.button(label="✅ Взять на рассмотрение", style=discord.ButtonStyle.primary, custom_id="take_review")
-async def take_review(self, interaction: discord.Interaction, button: discord.ui.Button):
-    if self.taken:
-        return  # Просто игнорируем, если заявка уже взята
+    @discord.ui.button(label="✅ Взять на рассмотрение", style=discord.ButtonStyle.primary, custom_id="take_review")
+    async def take_review(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.taken:
+            await interaction.response.defer()
+            return
+        
+        self.taken = True
+        button.disabled = True
+        button.label = "✅ На рассмотрении"
+        await interaction.message.edit(view=self)
+        await interaction.channel.send(f"📋 **Заявка взята на рассмотрение** {interaction.user.mention}")
+        await interaction.response.defer()
     
-    self.taken = True
-    button.disabled = True
-    button.label = "✅ На рассмотрении"
-    await interaction.message.edit(view=self)
-    await interaction.channel.send(f"📋 **Заявка взята на рассмотрение** {interaction.user.mention}")
-    
-    # Не отправляем сообщение пользователю
-    await interaction.response.defer()
-
-@discord.ui.button(label="❌ Закрыть заявку", style=discord.ButtonStyle.danger, custom_id="close_application")
-async def close_application(self, interaction: discord.Interaction, button: discord.ui.Button):
-    if not interaction.user.guild_permissions.manage_messages and not interaction.user.guild_permissions.administrator:
-        return  # Просто игнорируем, если нет прав
-    
-    await interaction.channel.send(f"🔒 **Заявка закрыта** {interaction.user.mention}\nКанал удалится через 5 секунд...")
-    
-    # Не отправляем сообщение пользователю
-    await interaction.response.defer()
-    
-    await asyncio.sleep(5)
-    await interaction.channel.delete()
+    @discord.ui.button(label="❌ Закрыть заявку", style=discord.ButtonStyle.danger, custom_id="close_application")
+    async def close_application(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_messages and not interaction.user.guild_permissions.administrator:
+            await interaction.response.defer()
+            return
+        
+        await interaction.channel.send(f"🔒 **Заявка закрыта** {interaction.user.mention}\nКанал удалится через 5 секунд...")
+        await interaction.response.defer()
+        
+        await asyncio.sleep(5)
+        await interaction.channel.delete()
 
 class ApplicationView(discord.ui.View):
     def __init__(self):
@@ -181,7 +179,7 @@ async def on_ready():
     print(f'📨 Категория для заявок: {CATEGORY_ID}')
     try:
         bot.add_view(ApplicationView())
-        bot.add_view(ModerationView(0))
+        bot.add_view(ModerationView(0))  # Регистрируем ModerationView
         print('✅ Views зарегистрированы')
     except Exception as e:
         print(f'❌ Ошибка views: {e}')
