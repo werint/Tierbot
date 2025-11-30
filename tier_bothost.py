@@ -133,8 +133,7 @@ class ModerationView(discord.ui.View):
 @discord.ui.button(label="✅ Взять на рассмотрение", style=discord.ButtonStyle.primary, custom_id="take_review")
 async def take_review(self, interaction: discord.Interaction, button: discord.ui.Button):
     if self.taken:
-        await interaction.response.send_message("❌ Заявка уже взята!", ephemeral=True)
-        return
+        return  # Просто игнорируем, если заявка уже взята
     
     self.taken = True
     button.disabled = True
@@ -142,17 +141,18 @@ async def take_review(self, interaction: discord.Interaction, button: discord.ui
     await interaction.message.edit(view=self)
     await interaction.channel.send(f"📋 **Заявка взята на рассмотрение** {interaction.user.mention}")
     
-    await interaction.response.send_message("✅ Вы взяли заявку!", ephemeral=True)
-    
+    # Не отправляем сообщение пользователю
+    await interaction.response.defer()
+
 @discord.ui.button(label="❌ Закрыть заявку", style=discord.ButtonStyle.danger, custom_id="close_application")
 async def close_application(self, interaction: discord.Interaction, button: discord.ui.Button):
     if not interaction.user.guild_permissions.manage_messages and not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ Нет прав!", ephemeral=True)
-        return
+        return  # Просто игнорируем, если нет прав
     
     await interaction.channel.send(f"🔒 **Заявка закрыта** {interaction.user.mention}\nКанал удалится через 5 секунд...")
     
-    await interaction.response.send_message("✅ Заявка закрыта!", ephemeral=True)
+    # Не отправляем сообщение пользователю
+    await interaction.response.defer()
     
     await asyncio.sleep(5)
     await interaction.channel.delete()
