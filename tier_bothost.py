@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord import ui
+from discord import app_commands, ui
 import asyncio
 import os
 import sys
@@ -13,6 +13,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 CATEGORY_ID = 1381679976486539334
 LOG_CHANNEL_ID = 1448991378750046209
+ALLOWED_ROLE_IDS = [1310673963000528949, 1381682246678741022, 1223589384452833290]  # Роли с доступом к командам
 TOKEN = os.getenv('DISCORD_TOKEN')
 
 if not TOKEN:
@@ -44,6 +45,21 @@ async def send_log(action: str, user: discord.User, details: str = "", fields: l
             await log_channel.send(embed=embed)
     except Exception as e:
         print(f"Ошибка при отправке лога: {e}")
+
+def has_allowed_role():
+    """Декоратор для проверки наличия разрешенных ролей"""
+    async def predicate(interaction: discord.Interaction) -> bool:
+        # Проверяем, есть ли у пользователя хотя бы одна из разрешенных ролей
+        user_roles = [role.id for role in interaction.user.roles]
+        has_role = any(role_id in user_roles for role_id in ALLOWED_ROLE_IDS)
+        
+        # Также разрешаем администраторам и модераторам
+        if interaction.user.guild_permissions.administrator or interaction.user.guild_permissions.manage_messages:
+            return True
+            
+        return has_role
+    
+    return app_commands.check(predicate)
 
 class TierApplication(ui.Modal, title='Заявка на Tier'):
     def __init__(self):
@@ -111,6 +127,7 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
                 interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
             }
             
+            # Добавляем права для администраторов и модераторов
             for role in interaction.guild.roles:
                 if role.permissions.administrator or role.permissions.manage_messages:
                     overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
@@ -226,8 +243,13 @@ class ModerationView(discord.ui.View):
     
     @discord.ui.button(label="❌ Закрыть заявку", style=discord.ButtonStyle.danger, custom_id="close_application")
     async def close_application(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.manage_messages and not interaction.user.guild_permissions.administrator:
-            await interaction.response.defer()
+        # Проверяем права через декоратор
+        user_roles = [role.id for role in interaction.user.roles]
+        has_allowed = any(role_id in user_roles for role_id in ALLOWED_ROLE_IDS)
+        has_perms = interaction.user.guild_permissions.administrator or interaction.user.guild_permissions.manage_messages
+        
+        if not has_allowed and not has_perms:
+            await interaction.response.send_message("❌ У вас нет прав для закрытия заявок.", ephemeral=True)
             return
         
         channel = interaction.channel
@@ -278,15 +300,27 @@ async def on_ready():
     print(f'✅ Бот {bot.user} успешно запущен на Railway!')
     print(f'📨 Категория для заявок: {CATEGORY_ID}')
     print(f'📋 Канал для логов: {LOG_CHANNEL_ID}')
+    print(f'🎯 Разрешенные роли для команд: {ALLOWED_ROLE_IDS}')
+    
     try:
         bot.add_view(ApplicationView())
         bot.add_view(ModerationView(0, 0, "", "", "", "", ""))
         print('✅ Views зарегистрированы')
+        
+        # Синхронизация команд
+        try:
+            synced = await bot.tree.sync()
+            print(f'✅ Синхронизировано {len(synced)} команд')
+        except Exception as e:
+            print(f'❌ Ошибка синхронизации команд: {e}')
+            
     except Exception as e:
         print(f'❌ Ошибка views: {e}')
 
-@bot.command()
-async def заявка(ctx):
+@bot.tree.command(name="заявка", description="Создать панель заявок на Tier")
+@has_allowed_role()
+async def create_application_panel(interaction: discord.Interaction):
+    """Создает панель заявок на Tier (только для разрешенных ролей)"""
     try:
         view = ApplicationView()
         embed = discord.Embed(
@@ -302,10 +336,101 @@ async def заявка(ctx):
 > ✵ **2 отката с RP** - поставка/дроп/цеха (YouTube/Rutube)
 > ✵ **MCL откаты** - по желанию, повышает шанс на более высокий тир (YouTube/Rutube)""", inline=False)
         embed.set_image(url="https://media.discordapp.net/attachments/1354522711895834646/1444635751198490704/maxresdefault.jpg?ex=692d6d63&is=692c1be3&hm=08f0a3666648dd1694c65b536d0e82490e42ef31497d8ebbc9decb0fe5fa6cd3&=&format=webp")
-        await ctx.send(embed=embed, view=view)
+        
+        await interaction.response.send_message(embed=embed, view=view)
+        
+        # Логируем создание панели
+        await send_log(
+            "📋 Панель заявок создана",
+            interaction.user,
+            f"Панель создана в канале: {interaction.channel.mention}",
+            fields=[("👤 Создал", f"{interaction.user.mention} ({interaction.user.id})")]
+        )
+        
     except Exception as e:
         print(f"Ошибка команды заявка: {e}")
-        await ctx.send("❌ Ошибка создания заявки")
+        await interaction.response.send_message("❌ Ошибка создания панели заявок", ephemeral=True)
+
+@bot.tree.command(name="статус", description="Показать статус бота")
+@has_allowed_role()
+async def bot_status(interaction: discord.Interaction):
+    """Показывает статус бота (только для разрешенных ролей)"""
+    try:
+        embed = discord.Embed(
+            title="📊 Статус бота",
+            color=0x3498db
+        )
+        
+        embed.add_field(name="🤖 Бот", value=f"```{bot.user.name}```", inline=True)
+        embed.add_field(name="🆔 ID бота", value=f"```{bot.user.id}```", inline=True)
+        embed.add_field(name="📅 Запущен", value=f"```{discord.utils.format_dt(bot.user.created_at, 'R')}```", inline=False)
+        
+        embed.add_field(name="📨 Категория заявок", value=f"```ID: {CATEGORY_ID}```", inline=True)
+        embed.add_field(name="📋 Канал логов", value=f"```ID: {LOG_CHANNEL_ID}```", inline=True)
+        
+        # Информация о гильдии
+        guild = interaction.guild
+        if guild:
+            embed.add_field(name="🏰 Сервер", value=f"```{guild.name}```", inline=True)
+            embed.add_field(name="👥 Участников", value=f"```{guild.member_count}```", inline=True)
+        
+        embed.add_field(name="⚡ Ping", value=f"```{round(bot.latency * 1000)}ms```", inline=True)
+        
+        embed.set_footer(text=f"Запросил: {interaction.user.display_name}")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        print(f"Ошибка команды статус: {e}")
+        await interaction.response.send_message("❌ Ошибка получения статуса", ephemeral=True)
+
+@bot.tree.command(name="очистить", description="Очистить указанное количество сообщений")
+@app_commands.describe(количество="Количество сообщений для очистки (1-100)")
+@has_allowed_role()
+async def clear_messages(interaction: discord.Interaction, количество: int):
+    """Очищает указанное количество сообщений (только для разрешенных ролей)"""
+    try:
+        if количество < 1 or количество > 100:
+            await interaction.response.send_message("❌ Количество должно быть от 1 до 100", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        deleted = await interaction.channel.purge(limit=количество)
+        
+        # Логируем очистку
+        await send_log(
+            "🧹 Сообщения очищены",
+            interaction.user,
+            f"Очищено {len(deleted)} сообщений в #{interaction.channel.name}",
+            fields=[
+                ("👤 Очистил", f"{interaction.user.mention} ({interaction.user.id})"),
+                ("📊 Количество", str(len(deleted))),
+                ("#️⃣ Канал", f"#{interaction.channel.name} (`{interaction.channel.id}`)")
+            ]
+        )
+        
+        await interaction.followup.send(f"✅ Очищено {len(deleted)} сообщений", ephemeral=True)
+        
+    except Exception as e:
+        print(f"Ошибка команды очистить: {e}")
+        await interaction.followup.send("❌ Ошибка при очистке сообщений", ephemeral=True)
+
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """Обработчик ошибок для slash-команд"""
+    if isinstance(error, app_commands.CheckFailure):
+        await interaction.response.send_message(
+            "❌ У вас нет прав для использования этой команды.\n"
+            f"Требуемые роли: {', '.join([f'<@&{role_id}>' for role_id in ALLOWED_ROLE_IDS])}",
+            ephemeral=True
+        )
+    else:
+        print(f"Ошибка slash-команды: {error}")
+        try:
+            await interaction.response.send_message("❌ Произошла ошибка при выполнении команды", ephemeral=True)
+        except:
+            pass
 
 @bot.event
 async def on_command_error(ctx, error):
