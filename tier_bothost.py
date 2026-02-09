@@ -332,7 +332,6 @@ async def create_application_panel(interaction: discord.Interaction):
         embed.add_field(name="📝 Требования", value="""
 > ✵ **10 скринов** с 50+ киллов (imgur/ibb)
 > ✵ **2 видео с арены** - полные 10-минутные (тяжка/спешик + сайга)
-> ✵ **Видео с каптов** - со звуком, можно с других семей(по желанию, повышает шанс на более высокий тир (YouTube/Rutube))
 > ✵ **Откаты с залазами** - [ССЫЛКА НА ЗАЛАЗЫ](https://docs.google.com/spreadsheets/d/1RWonpmIXoq5I80yqOcQ5X2OqyEzDuL-vXDXn9zQNAAM/edit?gid=2141313289#gid=2141313289)
 > -> 1 6 7 10 15 - **Церовкь**
 > -> 1 2 11 - **Завод** 
@@ -342,7 +341,7 @@ async def create_application_panel(interaction: discord.Interaction):
 > -> 1 - **Яки** 
 > -> 9 5 - **Палето** 
 > -> 2 - **Дом Майкла**
-> ✵ **MCL откаты** - по желанию, повышает шанс на более высокий тир (YouTube/Rutube)""", inline=False)
+> ✵ **Капты и MCL откаты** - по желанию, повышает шанс на более высокий тир (YouTube/Rutube)""", inline=False)
         embed.set_image(url="https://media.discordapp.net/attachments/1354522711895834646/1444635751198490704/maxresdefault.jpg?ex=692d6d63&is=692c1be3&hm=08f0a3666648dd1694c65b536d0e82490e42ef31497d8ebbc9decb0fe5fa6cd3&=&format=webp")
         
         await interaction.response.send_message(embed=embed, view=view)
