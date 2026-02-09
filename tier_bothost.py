@@ -91,14 +91,14 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
     )
     
     capt_videos = ui.TextInput(
-        label='видео залазы',
+        label='Видео залазы',
         placeholder='Ссылки на видео',
         style=discord.TextStyle.paragraph,
         max_length=1000
     )
     
     rp_mcl_videos = ui.TextInput(
-        label='капты откаты + MCL (по желанию)',
+        label='Капты откаты + MCL (по желанию)',
         placeholder='Сначала капты откаты, затем MCL если есть',
         style=discord.TextStyle.paragraph,
         max_length=1500
@@ -332,8 +332,16 @@ async def create_application_panel(interaction: discord.Interaction):
         embed.add_field(name="📝 Требования", value="""
 > ✵ **10 скринов** с 50+ киллов (imgur/ibb)
 > ✵ **2 видео с арены** - полные 10-минутные (тяжка/спешик + сайга)
-> ✵ **видео с каптов** - со звуком, можно с других семей(по желанию, повышает шанс на более высокий тир (YouTube/Rutube))
-> ✵ **откаты с залазами** - нумерации залазов [ССЫЛКА НА ЗАЛАЗЫ](https://docs.google.com/spreadsheets/d/1RWonpmIXoq5I80yqOcQ5X2OqyEzDuL-vXDXn9zQNAAM/edit?gid=2141313289#gid=2141313289)-> 1 6 7 10 15 - Церовкь -> 1 2 11 - Завод -> 3 - Пирс -> 12 - Миррор -> 7 - Сэндик -> 1 - Яки -> 5 с двух сторон -> 9 - Палето -> 2 - Дом Майкла)
+> ✵ **Видео с каптов** - со звуком, можно с других семей(по желанию, повышает шанс на более высокий тир (YouTube/Rutube))
+> ✵ **Откаты с залазами** - [ССЫЛКА НА ЗАЛАЗЫ](https://docs.google.com/spreadsheets/d/1RWonpmIXoq5I80yqOcQ5X2OqyEzDuL-vXDXn9zQNAAM/edit?gid=2141313289#gid=2141313289)
+> -> 1 6 7 10 15 - **Церовкь**
+> -> 1 2 11 - **Завод** 
+> -> 3 - **Пирс** 
+> -> 12 - **Миррор** 
+> -> 7 - **Сэндик** 
+> -> 1 - **Яки** 
+> -> 9 5 - **Палето** 
+> -> 2 - **Дом Майкла**
 > ✵ **MCL откаты** - по желанию, повышает шанс на более высокий тир (YouTube/Rutube)""", inline=False)
         embed.set_image(url="https://media.discordapp.net/attachments/1354522711895834646/1444635751198490704/maxresdefault.jpg?ex=692d6d63&is=692c1be3&hm=08f0a3666648dd1694c65b536d0e82490e42ef31497d8ebbc9decb0fe5fa6cd3&=&format=webp")
         
