@@ -91,15 +91,15 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
     )
     
     capt_videos = ui.TextInput(
-        label='3 видео с каптов (последние 3)',
-        placeholder='Ссылки на видео со звуком',
+        label='видео залазы',
+        placeholder='Ссылки на видео',
         style=discord.TextStyle.paragraph,
         max_length=1000
     )
     
     rp_mcl_videos = ui.TextInput(
-        label='RP откаты (2) + MCL (по желанию)',
-        placeholder='Сначала 2 RP отката, затем MCL если есть',
+        label='капты откаты + MCL (по желанию)',
+        placeholder='Сначала капты откаты, затем MCL если есть',
         style=discord.TextStyle.paragraph,
         max_length=1500
     )
@@ -147,8 +147,8 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
             embed.add_field(name="👤 Игрок", value=f"```{self.nickname_value}```", inline=False)
             embed.add_field(name="📸 10 скринов с 50+ киллов", value=f"{self.screenshots_value[:500]}..." if len(self.screenshots_value) > 500 else self.screenshots_value, inline=False)
             embed.add_field(name="🎮 2 видео с арены", value=f"{self.arena_videos_value[:500]}..." if len(self.arena_videos_value) > 500 else self.arena_videos_value, inline=False)
-            embed.add_field(name="⚔️ 3 видео с каптов", value=f"{self.capt_videos_value[:500]}..." if len(self.capt_videos_value) > 500 else self.capt_videos_value, inline=False)
-            embed.add_field(name="🎭 RP + MCL откаты", value=f"{self.rp_mcl_videos_value[:500]}..." if len(self.rp_mcl_videos_value) > 500 else self.rp_mcl_videos_value, inline=False)
+            embed.add_field(name="⚔️ Видео залазы", value=f"{self.capt_videos_value[:500]}..." if len(self.capt_videos_value) > 500 else self.capt_videos_value, inline=False)
+            embed.add_field(name="🎭 капты + MCL откаты", value=f"{self.rp_mcl_videos_value[:500]}..." if len(self.rp_mcl_videos_value) > 500 else self.rp_mcl_videos_value, inline=False)
             embed.set_footer(text=f"ID пользователя: {interaction.user.id}")
             
             view = ModerationView(
@@ -171,8 +171,8 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
                 ("🎯 Никнейм", f"`{self.nickname_value}`"),
                 ("📸 Скрины (50+ киллов)", self.screenshots_value[:800] if self.screenshots_value else "Не указано"),
                 ("🎮 Видео арены", self.arena_videos_value[:800] if self.arena_videos_value else "Не указано"),
-                ("⚔️ Видео каптов", self.capt_videos_value[:800] if self.capt_videos_value else "Не указано"),
-                ("🎭 RP + MCL откаты", self.rp_mcl_videos_value[:800] if self.rp_mcl_videos_value else "Не указано"),
+                ("⚔️ Видео залазы", self.capt_videos_value[:800] if self.capt_videos_value else "Не указано"),
+                ("🎭 капты + MCL откаты", self.rp_mcl_videos_value[:800] if self.rp_mcl_videos_value else "Не указано"),
                 ("#️⃣ Канал", f"{channel.mention} (`{channel.id}`)")
             ]
             
@@ -262,8 +262,8 @@ class ModerationView(discord.ui.View):
             ("🎯 Никнейм", f"`{self.nickname}`"),
             ("📸 Скрины", self.screenshots[:800] if self.screenshots else "Не указано"),
             ("🎮 Видео арены", self.arena_videos[:800] if self.arena_videos else "Не указано"),
-            ("⚔️ Видео каптов", self.capt_videos[:800] if self.capt_videos else "Не указано"),
-            ("🎭 RP + MCL", self.rp_mcl_videos[:800] if self.rp_mcl_videos else "Не указано"),
+            ("⚔️ Видео залазов", self.capt_videos[:800] if self.capt_videos else "Не указано"),
+            ("🎭 Капты + MCL", self.rp_mcl_videos[:800] if self.rp_mcl_videos else "Не указано"),
             ("#️⃣ Канал", f"#{channel.name} (`{channel.id}`)")
         ]
         
@@ -320,7 +320,7 @@ async def on_ready():
 @bot.tree.command(name="заявка", description="Создать панель заявок на Tier")
 @has_allowed_role()
 async def create_application_panel(interaction: discord.Interaction):
-    """Создает панель заявок на Tier (только для разрешенных ролей)"""
+    """Создает панель заявок на Tier"""
     try:
         view = ApplicationView()
         embed = discord.Embed(
@@ -332,8 +332,8 @@ async def create_application_panel(interaction: discord.Interaction):
         embed.add_field(name="📝 Требования", value="""
 > ✵ **10 скринов** с 50+ киллов (imgur/ibb)
 > ✵ **2 видео с арены** - полные 10-минутные (тяжка/спешик + сайга)
-> ✵ **3 видео с каптов** - последние 3, со звуком
-> ✵ **2 отката с RP** - поставка/дроп/цеха (YouTube/Rutube)
+> ✵ **видео с каптов** - со звуком, можно с других семей(по желанию, повышает шанс на более высокий тир (YouTube/Rutube))
+> ✵ **откаты с залазами** - нумерации залазов [ССЫЛКА НА ЗАЛАЗЫ](https://docs.google.com/spreadsheets/d/1RWonpmIXoq5I80yqOcQ5X2OqyEzDuL-vXDXn9zQNAAM/edit?gid=2141313289#gid=2141313289)-> 1 6 7 10 15 - Церовкь -> 1 2 11 - Завод -> 3 - Пирс -> 12 - Миррор -> 7 - Сэндик -> 1 - Яки -> 5 с двух сторон -> 9 - Палето -> 2 - Дом Майкла)
 > ✵ **MCL откаты** - по желанию, повышает шанс на более высокий тир (YouTube/Rutube)""", inline=False)
         embed.set_image(url="https://media.discordapp.net/attachments/1354522711895834646/1444635751198490704/maxresdefault.jpg?ex=692d6d63&is=692c1be3&hm=08f0a3666648dd1694c65b536d0e82490e42ef31497d8ebbc9decb0fe5fa6cd3&=&format=webp")
         
