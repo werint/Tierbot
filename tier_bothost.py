@@ -617,24 +617,22 @@ async def create_warn_panel(interaction: discord.Interaction):
 > Вы должны выполнить **ОДНО** из условий:
 > 
 > **🎯 Вариант 1:** 5 ггшек с 50+ киллов
-> **📅 Вариант 2:** Присутствие на 5 МП (массовых ивентах)
+> **📅 Вариант 2:** Присутствие на 5 МП
 > 
 > ⚠️ **ВАЖНО:** 
 > - Учитываются только те ггшки и МП, которые были сделаны **ПОСЛЕ** выданного варна
-> - Ссылки должны быть рабочими и доступными для проверки
-> - Фальсификация доказательств приведет к перманентному бану
-> """,
+""",
             inline=False
         )
         
         embed.add_field(
             name="📝 Как подать заявку:",
-            value="1. Нажмите кнопку '📝 Подать заявку' ниже\n2. Заполните форму\n3. Ожидайте решения модератора",
+            value="1. Нажмите кнопку '📝 Подать заявку' ниже\n2. Заполните форму\n3. Ожидайте решения Вора в законе",
             inline=False
         )
         
-        embed.set_footer(text="Заявки рассматриваются в течение 24-48 часов")
-        embed.set_image(url="https://media.discordapp.net/attachments/1354522711895834646/1444635751198490704/maxresdefault.jpg?ex=692d6d63&is=692c1be3&hm=08f0a3666648dd1694c65b536d0e82490e42ef31497d8ebbc9decb0fe5fa6cd3&=&format=webp")
+        embed.set_footer(text="В лс придет результат, с любовью Skeet<3")
+        embed.set_image(url="https://i.ytimg.com/vi/g-SiUWFmQ94/maxresdefault.jpg?sqp=-oaymwEmCIAKENAF8quKqQMa8AEB-AHUBoAC4AOKAgwIABABGGQgZChkMA8=&rs=AOn4CLBXZYgL89IRNlWkLYeBYPf6RHdSIw")
         
         await interaction.response.send_message(embed=embed, view=view)
         
