@@ -13,6 +13,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 CATEGORY_ID = 1381679976486539334
 LOG_CHANNEL_ID = 1448991378750046209
+WARN_CHANNEL_ID = 1470220017403433056  # Канал для заявок на снятие варнов
 ALLOWED_ROLE_IDS = [1310673963000528949, 1381682246678741022, 1223589384452833290]  # Роли с доступом к командам
 TOKEN = os.getenv('DISCORD_TOKEN')
 
@@ -60,6 +61,307 @@ def has_allowed_role():
         return has_role
     
     return app_commands.check(predicate)
+
+# ===================== КЛАССЫ ДЛЯ WARN ЗАЯВОК =====================
+
+class WarnApplicationModal(ui.Modal, title='Заявка на снятие варна'):
+    """Модальное окно для подачи заявки на снятие варна"""
+    
+    nickname = ui.TextInput(
+        label='Ваш никнейм',
+        placeholder='Пример: Skeet Amnyam',
+        max_length=50
+    )
+    
+    gg_links = ui.TextInput(
+        label='Ссылки на 5 ггшек с 50+ киллов',
+        placeholder='Ссылки на imgur/ibb (каждая с новой строки или через запятую)',
+        style=discord.TextStyle.paragraph,
+        max_length=1000,
+        required=False
+    )
+    
+    mp_links = ui.TextInput(
+        label='Ссылки на 5 присутствий на МП',
+        placeholder='Ссылки на скриншоты/подтверждения (каждая с новой строки или через запятую)',
+        style=discord.TextStyle.paragraph,
+        max_length=1000,
+        required=False
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.defer(ephemeral=True)
+            
+            # Проверяем, что хотя бы что-то заполнено
+            if not self.gg_links.value and not self.mp_links.value:
+                await interaction.followup.send(
+                    "❌ Вы должны предоставить либо 5 ггшек, либо 5 подтверждений присутствия на МП!",
+                    ephemeral=True
+                )
+                return
+            
+            # Получаем канал для заявок на варны
+            warn_channel = bot.get_channel(WARN_CHANNEL_ID)
+            if not warn_channel:
+                await interaction.followup.send('❌ Ошибка: не найден канал для заявок на варны', ephemeral=True)
+                return
+            
+            # Создаем embed с заявкой
+            embed = discord.Embed(
+                title=f"⚠️ Заявка на снятие варна от {self.nickname.value}",
+                color=0xff9900,
+                timestamp=discord.utils.utcnow()
+            )
+            
+            embed.add_field(name="👤 Игрок", value=f"```{self.nickname.value}```", inline=False)
+            embed.add_field(name="📞 Контакт", value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=False)
+            
+            if self.gg_links.value:
+                gg_value = self.gg_links.value[:500] + "..." if len(self.gg_links.value) > 500 else self.gg_links.value
+                embed.add_field(name="🎯 5 ггшек с 50+ киллов", value=gg_value, inline=False)
+            
+            if self.mp_links.value:
+                mp_value = self.mp_links.value[:500] + "..." if len(self.mp_links.value) > 500 else self.mp_links.value
+                embed.add_field(name="📅 5 присутствий на МП", value=mp_value, inline=False)
+            
+            embed.set_footer(text=f"ID пользователя: {interaction.user.id} • {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+            
+            # Создаем view с кнопками для модерации
+            view = WarnModerationView(
+                applicant_id=interaction.user.id,
+                applicant_name=self.nickname.value,
+                gg_links=self.gg_links.value,
+                mp_links=self.mp_links.value
+            )
+            
+            # Отправляем заявку в канал
+            message = await warn_channel.send(embed=embed, view=view)
+            
+            await interaction.followup.send(
+                f'✅ Ваша заявка на снятие варна отправлена в {warn_channel.mention}!\n'
+                f'Модераторы рассмотрят её в ближайшее время.',
+                ephemeral=True
+            )
+            
+            # Логируем создание заявки
+            log_fields = [
+                ("👤 Игрок", f"`{self.nickname.value}`"),
+                ("📞 Контакт", f"{interaction.user.mention} ({interaction.user.id})"),
+                ("🎯 Ггшки", self.gg_links.value[:800] if self.gg_links.value else "Не предоставлено"),
+                ("📅 МП", self.mp_links.value[:800] if self.mp_links.value else "Не предоставлено"),
+                ("#️⃣ Сообщение", f"[Перейти к заявке]({message.jump_url})")
+            ]
+            
+            await send_log(
+                "⚠️ Новая заявка на снятие варна",
+                interaction.user,
+                f"Заявка отправлена в {warn_channel.mention}",
+                fields=log_fields
+            )
+            
+        except Exception as e:
+            print(f"Ошибка при создании заявки на варн: {e}")
+            try:
+                await interaction.followup.send('❌ Ошибка при отправке заявки.', ephemeral=True)
+            except:
+                pass
+
+class WarnModerationView(discord.ui.View):
+    """View с кнопками для модерации заявок на снятие варна"""
+    
+    def __init__(self, applicant_id, applicant_name, gg_links, mp_links):
+        super().__init__(timeout=None)
+        self.applicant_id = applicant_id
+        self.applicant_name = applicant_name
+        self.gg_links = gg_links
+        self.mp_links = mp_links
+        self.decision_made = False
+    
+    @discord.ui.button(label="✅ Принять заявку", style=discord.ButtonStyle.success, custom_id="warn_accept")
+    async def accept_application(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Принять заявку на снятие варна"""
+        # Проверяем права через декоратор
+        user_roles = [role.id for role in interaction.user.roles]
+        has_allowed = any(role_id in user_roles for role_id in ALLOWED_ROLE_IDS)
+        has_perms = interaction.user.guild_permissions.administrator or interaction.user.guild_permissions.manage_messages
+        
+        if not has_allowed and not has_perms:
+            await interaction.response.send_message("❌ У вас нет прав для принятия заявок.", ephemeral=True)
+            return
+        
+        if self.decision_made:
+            await interaction.response.send_message("❌ По этой заявке уже было принято решение.", ephemeral=True)
+            return
+        
+        self.decision_made = True
+        # Отключаем кнопки
+        for child in self.children:
+            child.disabled = True
+        
+        # Обновляем embed
+        embed = interaction.message.embeds[0]
+        embed.color = 0x00ff00  # Зеленый цвет
+        embed.title = f"✅ ЗАЯВКА ПРИНЯТА - {self.applicant_name}"
+        embed.add_field(
+            name="✅ Решение",
+            value=f"Заявка принята {interaction.user.mention}\nВарн снят!",
+            inline=False
+        )
+        
+        await interaction.message.edit(embed=embed, view=self)
+        await interaction.response.send_message(f"✅ Заявка от {self.applicant_name} принята!", ephemeral=True)
+        
+        # Уведомляем заявителя
+        try:
+            applicant = await interaction.guild.fetch_member(self.applicant_id)
+            if applicant:
+                dm_embed = discord.Embed(
+                    title="✅ Ваша заявка на снятие варна принята!",
+                    description=f"Ваша заявка на снятие варна была рассмотрена и **ПРИНЯТА** модератором {interaction.user.mention}.",
+                    color=0x00ff00,
+                    timestamp=discord.utils.utcnow()
+                )
+                dm_embed.add_field(name="👤 Модератор", value=interaction.user.mention, inline=False)
+                dm_embed.add_field(name="🎯 Ваш никнейм", value=f"`{self.applicant_name}`", inline=False)
+                dm_embed.set_footer(text=f"Решение принято: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+                
+                await applicant.send(embed=dm_embed)
+        except Exception as e:
+            print(f"Не удалось отправить DM пользователю: {e}")
+        
+        # Логируем принятие заявки
+        log_fields = [
+            ("✅ Решение", "ПРИНЯТО"),
+            ("👤 Игрок", f"`{self.applicant_name}`"),
+            ("📞 Заявитель", f"<@{self.applicant_id}>"),
+            ("👨‍⚖️ Модератор", f"{interaction.user.mention} ({interaction.user.id})"),
+            ("🎯 Ггшки", "Предоставлены" if self.gg_links else "Не предоставлены"),
+            ("📅 МП", "Предоставлены" if self.mp_links else "Не предоставлены"),
+            ("#️⃣ Сообщение", f"[Перейти к заявке]({interaction.message.jump_url})")
+        ]
+        
+        await send_log(
+            "✅ Заявка на варн принята",
+            interaction.user,
+            f"Заявка от {self.applicant_name} принята",
+            fields=log_fields
+        )
+    
+    @discord.ui.button(label="❌ Отклонить заявку", style=discord.ButtonStyle.danger, custom_id="warn_reject")
+    async def reject_application(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Отклонить заявку на снятие варна"""
+        # Проверяем права через декоратор
+        user_roles = [role.id for role in interaction.user.roles]
+        has_allowed = any(role_id in user_roles for role_id in ALLOWED_ROLE_IDS)
+        has_perms = interaction.user.guild_permissions.administrator or interaction.user.guild_permissions.manage_messages
+        
+        if not has_allowed and not has_perms:
+            await interaction.response.send_message("❌ У вас нет прав для отклонения заявок.", ephemeral=True)
+            return
+        
+        if self.decision_made:
+            await interaction.response.send_message("❌ По этой заявке уже было принято решение.", ephemeral=True)
+            return
+        
+        # Создаем модальное окно для указания причины отказа
+        modal = WarnRejectModal()
+        await interaction.response.send_modal(modal)
+        
+        # Ждем заполнения модального окна
+        try:
+            await modal.wait()
+            reason = modal.reason.value if modal.reason.value else "Причина не указана"
+        except:
+            reason = "Причина не указана"
+        
+        self.decision_made = True
+        # Отключаем кнопки
+        for child in self.children:
+            child.disabled = True
+        
+        # Обновляем embed
+        embed = interaction.message.embeds[0]
+        embed.color = 0xff0000  # Красный цвет
+        embed.title = f"❌ ЗАЯВКА ОТКЛОНЕНА - {self.applicant_name}"
+        embed.add_field(
+            name="❌ Решение",
+            value=f"Заявка отклонена {interaction.user.mention}\n**Причина:** {reason}",
+            inline=False
+        )
+        
+        await interaction.message.edit(embed=embed, view=self)
+        
+        # Уведомляем заявителя
+        try:
+            applicant = await interaction.guild.fetch_member(self.applicant_id)
+            if applicant:
+                dm_embed = discord.Embed(
+                    title="❌ Ваша заявка на снятие варна отклонена",
+                    description=f"Ваша заявка на снятие варна была рассмотрена и **ОТКЛОНЕНА** модератором {interaction.user.mention}.",
+                    color=0xff0000,
+                    timestamp=discord.utils.utcnow()
+                )
+                dm_embed.add_field(name="👤 Модератор", value=interaction.user.mention, inline=False)
+                dm_embed.add_field(name="🎯 Ваш никнейм", value=f"`{self.applicant_name}`", inline=False)
+                dm_embed.add_field(name="📝 Причина отказа", value=reason, inline=False)
+                dm_embed.set_footer(text=f"Решение принято: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+                
+                await applicant.send(embed=dm_embed)
+        except Exception as e:
+            print(f"Не удалось отправить DM пользователю: {e}")
+        
+        # Логируем отклонение заявки
+        log_fields = [
+            ("❌ Решение", "ОТКЛОНЕНО"),
+            ("👤 Игрок", f"`{self.applicant_name}`"),
+            ("📞 Заявитель", f"<@{self.applicant_id}>"),
+            ("👨‍⚖️ Модератор", f"{interaction.user.mention} ({interaction.user.id})"),
+            ("📝 Причина", reason),
+            ("🎯 Ггшки", "Предоставлены" if self.gg_links else "Не предоставлены"),
+            ("📅 МП", "Предоставлены" if self.mp_links else "Не предоставлены"),
+            ("#️⃣ Сообщение", f"[Перейти к заявке]({interaction.message.jump_url})")
+        ]
+        
+        await send_log(
+            "❌ Заявка на варн отклонена",
+            interaction.user,
+            f"Заявка от {self.applicant_name} отклонена",
+            fields=log_fields
+        )
+
+class WarnRejectModal(ui.Modal, title='Укажите причину отказа'):
+    """Модальное окно для указания причины отказа"""
+    
+    reason = ui.TextInput(
+        label='Причина отклонения заявки',
+        placeholder='Опишите причину отклонения заявки...',
+        style=discord.TextStyle.paragraph,
+        max_length=500,
+        required=True
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+class WarnApplicationView(discord.ui.View):
+    """View с кнопкой для подачи заявки на снятие варна"""
+    
+    def __init__(self):
+        super().__init__(timeout=None)
+    
+    @discord.ui.button(label="📝 Подать заявку", style=discord.ButtonStyle.primary, custom_id="warn_apply_button")
+    async def application_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.response.send_modal(WarnApplicationModal())
+        except Exception as e:
+            print(f"Ошибка при открытии модального окна для варна: {e}")
+            try:
+                await interaction.response.send_message('❌ Ошибка открытия формы.', ephemeral=True)
+            except:
+                pass
+
+# ===================== СУЩЕСТВУЮЩИЙ КОД (Tier Application) =====================
 
 class TierApplication(ui.Modal, title='Заявка на Tier'):
     def __init__(self):
@@ -295,27 +597,58 @@ class ApplicationView(discord.ui.View):
             except:
                 pass
 
-@bot.event
-async def on_ready():
-    print(f'✅ Бот {bot.user} успешно запущен на Railway!')
-    print(f'📨 Категория для заявок: {CATEGORY_ID}')
-    print(f'📋 Канал для логов: {LOG_CHANNEL_ID}')
-    print(f'🎯 Разрешенные роли для команд: {ALLOWED_ROLE_IDS}')
-    
+# ===================== КОМАНДЫ =====================
+
+@bot.tree.command(name="warn", description="Создать панель заявок на снятие варна")
+@has_allowed_role()
+async def create_warn_panel(interaction: discord.Interaction):
+    """Создает панель заявок на снятие варна"""
     try:
-        bot.add_view(ApplicationView())
-        bot.add_view(ModerationView(0, 0, "", "", "", "", ""))
-        print('✅ Views зарегистрированы')
+        view = WarnApplicationView()
+        embed = discord.Embed(
+            title="⚠️ Снятие варна",
+            description="> Используй кнопку ниже чтобы подать заявку на снятие варна",
+            color=0xff9900
+        )
         
-        # Синхронизация команд
-        try:
-            synced = await bot.tree.sync()
-            print(f'✅ Синхронизировано {len(synced)} команд')
-        except Exception as e:
-            print(f'❌ Ошибка синхронизации команд: {e}')
-            
+        embed.add_field(
+            name="📋 Условия для снятия варна:",
+            value="""
+> Вы должны выполнить **ОДНО** из условий:
+> 
+> **🎯 Вариант 1:** 5 ггшек с 50+ киллов
+> **📅 Вариант 2:** Присутствие на 5 МП (массовых ивентах)
+> 
+> ⚠️ **ВАЖНО:** 
+> - Учитываются только те ггшки и МП, которые были сделаны **ПОСЛЕ** выданного варна
+> - Ссылки должны быть рабочими и доступными для проверки
+> - Фальсификация доказательств приведет к перманентному бану
+> """,
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📝 Как подать заявку:",
+            value="1. Нажмите кнопку '📝 Подать заявку' ниже\n2. Заполните форму\n3. Ожидайте решения модератора",
+            inline=False
+        )
+        
+        embed.set_footer(text="Заявки рассматриваются в течение 24-48 часов")
+        embed.set_image(url="https://media.discordapp.net/attachments/1354522711895834646/1444635751198490704/maxresdefault.jpg?ex=692d6d63&is=692c1be3&hm=08f0a3666648dd1694c65b536d0e82490e42ef31497d8ebbc9decb0fe5fa6cd3&=&format=webp")
+        
+        await interaction.response.send_message(embed=embed, view=view)
+        
+        # Логируем создание панели
+        await send_log(
+            "⚠️ Панель заявок на варн создана",
+            interaction.user,
+            f"Панель создана в канале: {interaction.channel.mention}",
+            fields=[("👤 Создал", f"{interaction.user.mention} ({interaction.user.id})")]
+        )
+        
     except Exception as e:
-        print(f'❌ Ошибка views: {e}')
+        print(f"Ошибка команды warn: {e}")
+        await interaction.response.send_message("❌ Ошибка создания панели заявок на варн", ephemeral=True)
 
 @bot.tree.command(name="заявка", description="Создать панель заявок на Tier")
 @has_allowed_role()
@@ -374,6 +707,7 @@ async def bot_status(interaction: discord.Interaction):
         
         embed.add_field(name="📨 Категория заявок", value=f"```ID: {CATEGORY_ID}```", inline=True)
         embed.add_field(name="📋 Канал логов", value=f"```ID: {LOG_CHANNEL_ID}```", inline=True)
+        embed.add_field(name="⚠️ Канал варнов", value=f"```ID: {WARN_CHANNEL_ID}```", inline=True)
         
         # Информация о гильдии
         guild = interaction.guild
@@ -382,6 +716,27 @@ async def bot_status(interaction: discord.Interaction):
             embed.add_field(name="👥 Участников", value=f"```{guild.member_count}```", inline=True)
         
         embed.add_field(name="⚡ Ping", value=f"```{round(bot.latency * 1000)}ms```", inline=True)
+        
+        # Подсчитываем количество заявок
+        tier_count = 0
+        try:
+            category = bot.get_channel(CATEGORY_ID)
+            if category and isinstance(category, discord.CategoryChannel):
+                tier_count = len([ch for ch in category.channels if isinstance(ch, discord.TextChannel)])
+        except:
+            pass
+        
+        warn_count = 0
+        try:
+            warn_channel = bot.get_channel(WARN_CHANNEL_ID)
+            if warn_channel:
+                async for message in warn_channel.history(limit=100):
+                    if message.embeds and "Заявка на снятие варна" in message.embeds[0].title:
+                        warn_count += 1
+        except:
+            pass
+        
+        embed.add_field(name="📊 Активные заявки", value=f"```Tier: {tier_count} | Warn: {warn_count}```", inline=False)
         
         embed.set_footer(text=f"Запросил: {interaction.user.display_name}")
         
@@ -444,6 +799,32 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
     print(f"Ошибка команды: {error}")
+
+@bot.event
+async def on_ready():
+    print(f'✅ Бот {bot.user} успешно запущен на Railway!')
+    print(f'📨 Категория для заявок: {CATEGORY_ID}')
+    print(f'📋 Канал для логов: {LOG_CHANNEL_ID}')
+    print(f'⚠️ Канал для заявок на варны: {WARN_CHANNEL_ID}')
+    print(f'🎯 Разрешенные роли для команд: {ALLOWED_ROLE_IDS}')
+    
+    try:
+        # Регистрируем все views
+        bot.add_view(ApplicationView())
+        bot.add_view(ModerationView(0, 0, "", "", "", "", ""))
+        bot.add_view(WarnApplicationView())
+        bot.add_view(WarnModerationView(0, "", "", ""))
+        print('✅ Views зарегистрированы')
+        
+        # Синхронизация команд
+        try:
+            synced = await bot.tree.sync()
+            print(f'✅ Синхронизировано {len(synced)} команд')
+        except Exception as e:
+            print(f'❌ Ошибка синхронизации команд: {e}')
+            
+    except Exception as e:
+        print(f'❌ Ошибка views: {e}')
 
 if __name__ == "__main__":
     print("🔄 Запуск бота...")
