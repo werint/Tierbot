@@ -625,12 +625,6 @@ async def create_warn_panel(interaction: discord.Interaction):
             inline=False
         )
         
-        embed.add_field(
-            name="📝 Как подать заявку:",
-            value="1. Нажмите кнопку '📝 Подать заявку' ниже\n2. Заполните форму\n3. Ожидайте решения Вора в законе",
-            inline=False
-        )
-        
         embed.set_footer(text="В лс придет результат, с любовью Skeet<3")
         embed.set_image(url="https://i.ytimg.com/vi/g-SiUWFmQ94/maxresdefault.jpg?sqp=-oaymwEmCIAKENAF8quKqQMa8AEB-AHUBoAC4AOKAgwIABABGGQgZChkMA8=&rs=AOn4CLBXZYgL89IRNlWkLYeBYPf6RHdSIw")
         
