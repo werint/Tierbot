@@ -606,7 +606,7 @@ async def create_warn_panel(interaction: discord.Interaction):
     try:
         view = WarnApplicationView()
         embed = discord.Embed(
-            title="⚠️ Снятие варна",
+            title="⚠️ Снятие варна/обжалование варна",
             description="> Используй кнопку ниже чтобы подать заявку на снятие варна",
             color=0xff9900
         )
@@ -621,6 +621,7 @@ async def create_warn_panel(interaction: discord.Interaction):
 > 
 > ⚠️ **ВАЖНО:** 
 > - Учитываются только те ггшки и МП, которые были сделаны **ПОСЛЕ** выданного варна
+> - Если вам нужно обжаловать варн, то доказательства прикрепите в любую из строк
 """,
             inline=False
         )
