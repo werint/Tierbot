@@ -205,13 +205,15 @@ class WarnApplicationModal(ui.Modal, title='Заявка на снятие ва�
 class WarnModerationView(discord.ui.View):
     """View с кнопками для модерации заявок на снятие варна"""
     
-    def __init__(self, applicant_id, applicant_name, gg_links, mp_links):
+    def __init__(self, applicant_id, applicant_name, gg_links, mp_links, message_id=None):
         super().__init__(timeout=None)
         self.applicant_id = applicant_id
         self.applicant_name = applicant_name
         self.gg_links = gg_links
         self.mp_links = mp_links
         self.decision_made = False
+        # Сохраняем ID сообщения для уникальности
+        self.message_id = message_id
     
     @discord.ui.button(label="✅ Принять заявку", style=discord.ButtonStyle.success, custom_id="warn_accept")
     async def accept_application(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -332,8 +334,8 @@ class WarnModerationView(discord.ui.View):
                 await interaction.response.send_message("❌ По этой заявке уже было принято решение.", ephemeral=True)
                 return
             
-            # Создаем модальное окно для указания причины отказа
-            modal = WarnRejectModal()
+            # Создаем модальное окно и передаем ему ссылку на этот view
+            modal = WarnRejectModal(parent_view=self)
             await interaction.response.send_modal(modal)
             
         except discord.errors.HTTPException as e:
@@ -362,88 +364,99 @@ class WarnModerationView(discord.ui.View):
 class WarnRejectModal(ui.Modal, title='Укажите причину отказа'):
     """Модальное окно для указания причины отказа"""
     
-    reason = ui.TextInput(
-        label='Причина отклонения заявки',
-        placeholder='Опишите причину отклонения заявки...',
-        style=discord.TextStyle.paragraph,
-        max_length=500,
-        required=True
-    )
+    def __init__(self, parent_view):
+        super().__init__(timeout=300)  # 5 минут timeout
+        self.parent_view = parent_view
+        
+        self.reason = ui.TextInput(
+            label='Причина отклонения заявки',
+            placeholder='Опишите причину отклонения заявки...',
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+            required=True
+        )
+        self.add_item(self.reason)
     
     async def on_submit(self, interaction: discord.Interaction):
         try:
             await interaction.response.defer(ephemeral=True)
             
-            # Находим родительское view
-            for view in interaction.message.components:
-                for child in view.children:
-                    if hasattr(child, 'custom_id') and child.custom_id == "warn_reject":
-                        parent_view = child.view
-                        if hasattr(parent_view, 'decision_made'):
-                            parent_view.decision_made = True
-                            
-                            # Отключаем все кнопки
-                            for child_btn in parent_view.children:
-                                child_btn.disabled = True
-                            
-                            # Обновляем embed
-                            embed = interaction.message.embeds[0]
-                            embed.color = 0xff0000  # Красный цвет
-                            embed.title = f"❌ ЗАЯВКА ОТКЛОНЕНА - {parent_view.applicant_name}"
-                            embed.add_field(
-                                name="❌ Решение",
-                                value=f"Заявка отклонена {interaction.user.mention}\n**Причина:** {self.reason.value}",
-                                inline=False
-                            )
-                            
-                            # Редактируем сообщение с задержкой
-                            await asyncio.sleep(0.5)
-                            await safe_request(interaction.message.edit(embed=embed, view=parent_view))
-                            
-                            # Уведомляем заявителя
-                            try:
-                                applicant = await interaction.guild.fetch_member(parent_view.applicant_id)
-                                if applicant:
-                                    dm_embed = discord.Embed(
-                                        title="❌ Ваша заявка на снятие варна отклонена",
-                                        description=f"Ваша заявка на снятие варна была рассмотрена и **ОТКЛОНЕНА** модератором {interaction.user.mention}.",
-                                        color=0xff0000,
-                                        timestamp=discord.utils.utcnow()
-                                    )
-                                    dm_embed.add_field(name="👤 Модератор", value=interaction.user.mention, inline=False)
-                                    dm_embed.add_field(name="🎯 Ваш никнейм", value=f"`{parent_view.applicant_name}`", inline=False)
-                                    dm_embed.add_field(name="📝 Причина отказа", value=self.reason.value, inline=False)
-                                    dm_embed.set_footer(text=f"Решение принято: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
-                                    
-                                    await asyncio.sleep(0.5)
-                                    await safe_request(applicant.send(embed=dm_embed))
-                            except Exception as e:
-                                print(f"Не удалось отправить DM пользователю: {e}")
-                            
-                            # Логируем отклонение заявки
-                            log_fields = [
-                                ("❌ Решение", "ОТКЛОНЕНО"),
-                                ("👤 Игрок", f"`{parent_view.applicant_name}`"),
-                                ("📞 Заявитель", f"<@{parent_view.applicant_id}>"),
-                                ("👨‍⚖️ Модератор", f"{interaction.user.mention} ({interaction.user.id})"),
-                                ("📝 Причина", self.reason.value),
-                                ("🎯 Ггшки", "Предоставлены" if parent_view.gg_links else "Не предоставлены"),
-                                ("📅 МП", "Предоставлены" if parent_view.mp_links else "Не предоставлены"),
-                                ("#️⃣ Сообщение", f"[Перейти к заявке]({interaction.message.jump_url})")
-                            ]
-                            
-                            await send_log(
-                                "❌ Заявка на варн отклонена",
-                                interaction.user,
-                                f"Заявка от {parent_view.applicant_name} отклонена",
-                                fields=log_fields
-                            )
-                            
-                            await interaction.followup.send(f"✅ Заявка от {parent_view.applicant_name} отклонена!", ephemeral=True)
-                            break
-            else:
-                await interaction.followup.send("❌ Не удалось найти информацию о заявке.", ephemeral=True)
-                
+            if not self.parent_view:
+                await interaction.followup.send("❌ Ошибка: не найдена информация о заявке.", ephemeral=True)
+                return
+            
+            # Проверяем, не принято ли уже решение
+            if self.parent_view.decision_made:
+                await interaction.followup.send("❌ По этой заявке уже было принято решение.", ephemeral=True)
+                return
+            
+            # Отмечаем, что решение принято
+            self.parent_view.decision_made = True
+            
+            # Отключаем все кнопки в view
+            for child in self.parent_view.children:
+                child.disabled = True
+            
+            # Получаем сообщение
+            message = interaction.message
+            
+            # Обновляем embed
+            embed = message.embeds[0].copy()
+            embed.color = 0xff0000  # Красный цвет
+            embed.title = f"❌ ЗАЯВКА ОТКЛОНЕНА - {self.parent_view.applicant_name}"
+            
+            # Добавляем поле с решением
+            embed.add_field(
+                name="❌ Решение",
+                value=f"Заявка отклонена {interaction.user.mention}\n**Причина:** {self.reason.value}",
+                inline=False
+            )
+            
+            # Редактируем сообщение
+            await asyncio.sleep(0.5)
+            await safe_request(message.edit(embed=embed, view=self.parent_view))
+            
+            # Уведомляем заявителя
+            try:
+                applicant = await interaction.guild.fetch_member(self.parent_view.applicant_id)
+                if applicant:
+                    dm_embed = discord.Embed(
+                        title="❌ Ваша заявка на снятие варна отклонена",
+                        description=f"Ваша заявка на снятие варна была рассмотрена и **ОТКЛОНЕНА** модератором {interaction.user.mention}.",
+                        color=0xff0000,
+                        timestamp=discord.utils.utcnow()
+                    )
+                    dm_embed.add_field(name="👤 Модератор", value=interaction.user.mention, inline=False)
+                    dm_embed.add_field(name="🎯 Ваш никнейм", value=f"`{self.parent_view.applicant_name}`", inline=False)
+                    dm_embed.add_field(name="📝 Причина отказа", value=self.reason.value, inline=False)
+                    dm_embed.set_footer(text=f"Решение принято: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+                    
+                    await asyncio.sleep(0.5)
+                    await safe_request(applicant.send(embed=dm_embed))
+            except Exception as e:
+                print(f"Не удалось отправить DM пользователю: {e}")
+            
+            # Логируем отклонение заявки
+            log_fields = [
+                ("❌ Решение", "ОТКЛОНЕНО"),
+                ("👤 Игрок", f"`{self.parent_view.applicant_name}`"),
+                ("📞 Заявитель", f"<@{self.parent_view.applicant_id}>"),
+                ("👨‍⚖️ Модератор", f"{interaction.user.mention} ({interaction.user.id})"),
+                ("📝 Причина", self.reason.value),
+                ("🎯 Ггшки", "Предоставлены" if self.parent_view.gg_links else "Не предоставлены"),
+                ("📅 МП", "Предоставлены" if self.parent_view.mp_links else "Не предоставлены"),
+                ("#️⃣ Сообщение", f"[Перейти к заявке]({message.jump_url})")
+            ]
+            
+            await send_log(
+                "❌ Заявка на варн отклонена",
+                interaction.user,
+                f"Заявка от {self.parent_view.applicant_name} отклонена",
+                fields=log_fields
+            )
+            
+            await interaction.followup.send(f"✅ Заявка от {self.parent_view.applicant_name} отклонена!", ephemeral=True)
+            
         except Exception as e:
             print(f"Ошибка при обработке отклонения заявки: {e}")
             try:
