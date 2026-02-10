@@ -205,15 +205,13 @@ class WarnApplicationModal(ui.Modal, title='Заявка на снятие ва�
 class WarnModerationView(discord.ui.View):
     """View с кнопками для модерации заявок на снятие варна"""
     
-    def __init__(self, applicant_id, applicant_name, gg_links, mp_links, message_id=None):
+    def __init__(self, applicant_id, applicant_name, gg_links, mp_links):
         super().__init__(timeout=None)
         self.applicant_id = applicant_id
         self.applicant_name = applicant_name
         self.gg_links = gg_links
         self.mp_links = mp_links
         self.decision_made = False
-        # Сохраняем ID сообщения для уникальности
-        self.message_id = message_id
     
     @discord.ui.button(label="✅ Принять заявку", style=discord.ButtonStyle.success, custom_id="warn_accept")
     async def accept_application(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -999,7 +997,7 @@ async def on_ready():
         bot.add_view(ApplicationView())
         bot.add_view(ModerationView(0, 0, "", "", "", "", ""))
         bot.add_view(WarnApplicationView())
-        bot.add_view(WarnModerationView(0, "", "", ""))
+        # WarnModerationView не регистрируем здесь - он создается динамически для каждой заявки
         print('✅ Views зарегистрированы')
         
         # Синхронизация команд
