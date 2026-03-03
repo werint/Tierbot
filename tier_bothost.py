@@ -111,16 +111,15 @@ class CaptListManager:
         self.last_update = time.time()
         self.registered_users = set()  # Множество ID пользователей в списке
         self.cached_messages = {}  # Кэш сообщений: {message_id: author_id}
-        self.last_message_id = None  # ID последнего обработанного сообщения
         
     async def update_list(self):
         """Обновляет список участников с оптимизацией запросов"""
         if not self.is_active:
             return False
         
-        # Проверяем, не прошло ли 5 секунд с последнего обновления
+        # Проверяем, не прошло ли 10 секунд с последнего обновления
         current_time = time.time()
-        if current_time - self.last_update < 5:
+        if current_time - self.last_update < 10:
             return False
         
         # Проверяем, не истек ли час
@@ -138,11 +137,10 @@ class CaptListManager:
                 print(f"⚠️ Роль {TRIGGER_ROLE_ID} не найдена")
                 return False
             
-            # Получаем только новые сообщения (последние 50)
-            new_users = set(self.registered_users)  # Копируем текущий список
+            # Получаем только последние 30 сообщений (уменьшаем нагрузку)
+            new_users = set()
             
-            # Проверяем новые сообщения
-            async for msg in channel.history(limit=50):
+            async for msg in channel.history(limit=30):
                 if msg.author.bot:
                     continue
                 
@@ -156,7 +154,7 @@ class CaptListManager:
                     if reaction.emoji == "✅":
                         # Проверяем только первого пользователя с реакцией
                         try:
-                            async for user in reaction.users(limit=3):  # Ограничиваем до 3 пользователей
+                            async for user in reaction.users(limit=2):  # Ограничиваем до 2 пользователей
                                 if not user.bot:
                                     member = channel.guild.get_member(user.id)
                                     if member and role in member.roles:
@@ -169,8 +167,6 @@ class CaptListManager:
                 
                 if has_valid_reaction:
                     new_users.add(msg.author.id)
-                else:
-                    new_users.discard(msg.author.id)
             
             # Проверяем изменения
             if new_users != self.registered_users:
@@ -949,10 +945,10 @@ class ApplicationView(discord.ui.View):
 
 # ===================== КОМАНДЫ =====================
 
-@bot.tree.command(name="capt", description="Создать список на капт (обновляется раз в 5 секунд)")
+@bot.tree.command(name="capt", description="Создать список на капт (обновляется раз в 10 секунд)")
 @has_allowed_role()
 async def create_capt_list(interaction: discord.Interaction):
-    """Создает список на капт, который обновляется раз в 5 секунд"""
+    """Создает список на капт, который обновляется раз в 10 секунд"""
     try:
         # Создаем начальный embed
         embed = discord.Embed(
@@ -977,10 +973,10 @@ async def create_capt_list(interaction: discord.Interaction):
             while capt_manager.is_active:
                 try:
                     await capt_manager.update_list()
-                    await asyncio.sleep(5)  # Обновление каждые 5 секунд
+                    await asyncio.sleep(10)  # Обновление каждые 10 секунд
                 except Exception as e:
                     print(f"Ошибка в цикле обновления capt списка: {e}")
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(10)
         
         bot.loop.create_task(update_loop())
         
@@ -992,7 +988,7 @@ async def create_capt_list(interaction: discord.Interaction):
             fields=[
                 ("👤 Создатель", f"{interaction.user.mention} ({interaction.user.id})"),
                 ("⏰ Длительность", "1 час"),
-                ("🔄 Обновление", "Каждые 5 секунд"),
+                ("🔄 Обновление", "Каждые 10 секунд"),
                 ("#️⃣ Сообщение", f"[Перейти к списку]({message.jump_url})")
             ]
         )
@@ -1218,9 +1214,9 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     for capt_list in active_capt_lists.values():
         if capt_list.message.channel.id == payload.channel_id and capt_list.is_active:
             # Обновляем только если прошло достаточно времени
-            if time.time() - capt_list.last_update >= 3:
+            if time.time() - capt_list.last_update >= 5:
                 async def delayed_update():
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(2)  # Увеличиваем задержку до 2 секунд
                     await capt_list.update_list()
                 bot.loop.create_task(delayed_update())
             break
@@ -1240,9 +1236,9 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
     for capt_list in active_capt_lists.values():
         if capt_list.message.channel.id == payload.channel_id and capt_list.is_active:
             # Обновляем только если прошло достаточно времени
-            if time.time() - capt_list.last_update >= 3:
+            if time.time() - capt_list.last_update >= 5:
                 async def delayed_update():
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(2)  # Увеличиваем задержку до 2 секунд
                     await capt_list.update_list()
                 bot.loop.create_task(delayed_update())
             break
