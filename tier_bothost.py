@@ -110,7 +110,7 @@ class CaptListManager:
         self.is_active = True
         self.last_update = time.time()
         self.registered_users = set()  # Множество ID пользователей в списке
-        self.last_message_id = None  # ID последнего обработанного сообщения
+        self.processed_message_ids = set()  # Множество ID обработанных сообщений
         
     async def update_list(self):
         """Обновляет список участников с оптимизацией запросов"""
@@ -140,10 +140,13 @@ class CaptListManager:
                 print(f"⚠️ Роль {TRIGGER_ROLE_ID} не найдена")
                 return False
             
-            # Проходим по сообщениям, начиная с последнего
-            async for msg in channel.history(limit=100, after=self.last_message_id):
+            # Сначала проверяем новые сообщения (последние 50)
+            async for msg in channel.history(limit=50):
                 if msg.author.bot:
                     continue
+                
+                # Добавляем ID сообщения в обработанные
+                self.processed_message_ids.add(msg.id)
                 
                 # Проверяем каждую реакцию на сообщении
                 for reaction in msg.reactions:
@@ -164,37 +167,29 @@ class CaptListManager:
                                 continue
                             else:
                                 raise
-                
-                # Обновляем последнее обработанное сообщение
-                self.last_message_id = msg.id
-                
-                # Добавляем небольшую задержку между запросами
-                await asyncio.sleep(0.5)
             
-            # Также проверяем изменения в уже обработанных сообщениях (удаление реакций)
-            if len(new_users) < len(self.registered_users):
-                # Если количество уменьшилось, нужно проверить все сообщения
-                async for msg in channel.history(limit=200):
-                    if msg.author.bot:
-                        continue
-                    
-                    # Проверяем, должен ли автор быть в списке
-                    should_be_in_list = False
-                    
-                    for reaction in msg.reactions:
-                        if reaction.emoji == "✅":
-                            try:
-                                async for user in reaction.users(limit=10):
-                                    if not user.bot:
-                                        member = channel.guild.get_member(user.id)
-                                        if member and role in member.roles:
-                                            should_be_in_list = True
-                                            break
-                            except discord.errors.HTTPException:
-                                continue
-                    
-                    if should_be_in_list:
-                        new_users.add(msg.author.id)
+            # Проверяем только последние 100 сообщений на удаление реакций
+            async for msg in channel.history(limit=100):
+                if msg.author.bot or msg.id not in self.processed_message_ids:
+                    continue
+                
+                # Проверяем, есть ли у сообщения реакция от нужной роли
+                has_valid_reaction = False
+                
+                for reaction in msg.reactions:
+                    if reaction.emoji == "✅":
+                        try:
+                            async for user in reaction.users(limit=10):
+                                if not user.bot:
+                                    member = channel.guild.get_member(user.id)
+                                    if member and role in member.roles:
+                                        has_valid_reaction = True
+                                        break
+                        except discord.errors.HTTPException:
+                            continue
+                
+                if has_valid_reaction:
+                    new_users.add(msg.author.id)
             
             # Проверяем изменения
             if new_users != self.registered_users:
@@ -204,6 +199,8 @@ class CaptListManager:
                 
         except Exception as e:
             print(f"Ошибка при обновлении capt списка: {e}")
+            import traceback
+            traceback.print_exc()
         
         return True
     
@@ -1283,6 +1280,9 @@ async def on_ready():
         bot.add_view(ApplicationView())
         bot.add_view(ModerationView(0, 0, "", "", "", "", ""))
         bot.add_view(WarnApplicationView())
+        
+        # Важно: регистрируем WarnModerationView как persistent view
+        # Для этого создаем экземпляр с дефолтными значениями и добавляем его
         bot.add_view(WarnModerationView(0, "", "", ""))
         
         print('✅ Все persistent views зарегистрированы')
