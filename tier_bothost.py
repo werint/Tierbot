@@ -16,7 +16,7 @@ CATEGORY_ID = 1381679976486539334
 LOG_CHANNEL_ID = 1448991378750046209
 WARN_CHANNEL_ID = 1470220017403433056  # Канал для заявок на снятие варнов
 ALLOWED_ROLE_IDS = [1310673963000528949, 1381682246678741022, 1223589384452833290]  # Роли с доступом к командам
-TRIGGER_ROLE_ID = 1478205318591938671  # Роль, при реакции которой добавляются пользователи
+TRIGGER_ROLE_ID = 1478205318591938671  # Роль, которая может добавлять людей в капт
 TOKEN = os.getenv('DISCORD_TOKEN')
 
 if not TOKEN:
@@ -109,7 +109,7 @@ class CaptListManager:
         self.end_time = self.start_time + timedelta(hours=1)
         self.is_active = True
         self.last_update = time.time()
-        self.mentioned_users = set()  # Множество ID упомянутых пользователей
+        self.registered_users = set()  # Множество ID пользователей в списке
         
     async def update_list(self):
         """Обновляет список участников"""
@@ -131,7 +131,7 @@ class CaptListManager:
             # Получаем канал
             channel = self.message.channel
             
-            # Собираем всех пользователей с реакциями от нужной роли
+            # Собираем всех пользователей, на чьи сообщения есть реакции от людей с нужной ролью
             new_users = set()
             role = channel.guild.get_role(TRIGGER_ROLE_ID)
             
@@ -143,19 +143,23 @@ class CaptListManager:
             async for msg in channel.history(limit=200):
                 if msg.author.bot:
                     continue
-                    
-                # Проверяем, есть ли у сообщения реакции от пользователей с нужной ролью
+                
+                # Проверяем каждую реакцию на сообщении
                 for reaction in msg.reactions:
                     if reaction.emoji == "✅":  # Только реакции с галочкой
+                        # Проверяем, кто поставил эту реакцию
                         async for user in reaction.users():
                             if not user.bot:
                                 member = channel.guild.get_member(user.id)
+                                # Если реакцию поставил человек с нужной ролью
                                 if member and role in member.roles:
-                                    new_users.add(user.id)
+                                    # Добавляем АВТОРА сообщения в список
+                                    new_users.add(msg.author.id)
+                                    break  # Достаточно одной реакции от нужной роли
             
-            # Если есть новые пользователи, обновляем список
-            if new_users != self.mentioned_users:
-                self.mentioned_users = new_users
+            # Проверяем изменения
+            if new_users != self.registered_users:
+                self.registered_users = new_users
                 await self.update_embed()
                 self.last_update = current_time
                 
@@ -169,14 +173,16 @@ class CaptListManager:
         try:
             # Получаем имена пользователей
             user_mentions = []
-            for user_id in self.mentioned_users:
+            for user_id in self.registered_users:
                 user = self.message.guild.get_member(user_id)
                 if user:
-                    user_mentions.append(user.mention)
+                    user_mentions.append(f"{user.mention} (`{user.name}`)")
             
             if not user_mentions:
                 user_list = "Пока никого нет"
             else:
+                # Сортируем по алфавиту
+                user_mentions.sort()
                 user_list = "\n".join(user_mentions)
             
             # Создаем новый embed
@@ -188,7 +194,7 @@ class CaptListManager:
             )
             
             embed.add_field(
-                name=f"👥 Участники ({len(self.mentioned_users)})",
+                name=f"👥 Участники ({len(self.registered_users)})",
                 value=user_list[:1024] if len(user_list) > 1024 else user_list,
                 inline=False
             )
@@ -205,14 +211,15 @@ class CaptListManager:
         try:
             # Получаем имена пользователей
             user_mentions = []
-            for user_id in self.mentioned_users:
+            for user_id in self.registered_users:
                 user = self.message.guild.get_member(user_id)
                 if user:
-                    user_mentions.append(user.mention)
+                    user_mentions.append(f"{user.mention} (`{user.name}`)")
             
             if not user_mentions:
                 user_list = "Никто не участвовал"
             else:
+                user_mentions.sort()
                 user_list = "\n".join(user_mentions)
             
             # Создаем финальный embed
@@ -224,7 +231,7 @@ class CaptListManager:
             )
             
             embed.add_field(
-                name=f"👥 Итоговые участники ({len(self.mentioned_users)})",
+                name=f"👥 Итоговые участники ({len(self.registered_users)})",
                 value=user_list[:1024] if len(user_list) > 1024 else user_list,
                 inline=False
             )
@@ -355,6 +362,7 @@ class WarnModerationView(discord.ui.View):
     """View с кнопками для модерации заявок на снятие варна"""
     
     def __init__(self, applicant_id, applicant_name, gg_links, mp_links):
+        # Устанавливаем custom_id для постоянного view
         super().__init__(timeout=None)
         self.applicant_id = applicant_id
         self.applicant_name = applicant_name
@@ -1197,6 +1205,50 @@ async def on_command_error(ctx, error):
     print(f"Ошибка команды: {error}")
 
 @bot.event
+async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+    """Обрабатывает добавление реакции"""
+    if payload.emoji.name != "✅":
+        return
+    
+    # Проверяем, есть ли активный capt список в этом канале
+    channel = bot.get_channel(payload.channel_id)
+    if not channel:
+        return
+    
+    # Ищем активные списки в этом канале
+    for capt_list in active_capt_lists.values():
+        if capt_list.message.channel.id == payload.channel_id and capt_list.is_active:
+            # Запускаем обновление с небольшой задержкой
+            async def delayed_update():
+                await asyncio.sleep(1)  # Ждем 1 секунду для обработки всех событий
+                await capt_list.update_list()
+            
+            bot.loop.create_task(delayed_update())
+            break
+
+@bot.event
+async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
+    """Обрабатывает удаление реакции"""
+    if payload.emoji.name != "✅":
+        return
+    
+    # Проверяем, есть ли активный capt список в этом канале
+    channel = bot.get_channel(payload.channel_id)
+    if not channel:
+        return
+    
+    # Ищем активные списки в этом канале
+    for capt_list in active_capt_lists.values():
+        if capt_list.message.channel.id == payload.channel_id and capt_list.is_active:
+            # Запускаем обновление с небольшой задержкой
+            async def delayed_update():
+                await asyncio.sleep(1)  # Ждем 1 секунду для обработки всех событий
+                await capt_list.update_list()
+            
+            bot.loop.create_task(delayed_update())
+            break
+
+@bot.event
 async def on_ready():
     print(f'✅ Бот {bot.user} успешно запущен на Railway!')
     print(f'📨 Категория для заявок: {CATEGORY_ID}')
@@ -1206,12 +1258,16 @@ async def on_ready():
     print(f'🎯 Разрешенные роли для команд: {ALLOWED_ROLE_IDS}')
     
     try:
-        # Регистрируем все views
+        # Регистрируем все persistent views
         bot.add_view(ApplicationView())
         bot.add_view(ModerationView(0, 0, "", "", "", "", ""))
         bot.add_view(WarnApplicationView())
-        # WarnModerationView не регистрируем здесь - он создается динамически для каждой заявки
-        print('✅ Views зарегистрированы')
+        
+        # Важно: регистрируем WarnModerationView как persistent view
+        # Для этого создаем экземпляр с дефолтными значениями и добавляем его
+        bot.add_view(WarnModerationView(0, "", "", ""))
+        
+        print('✅ Все persistent views зарегистрированы')
         
         # Синхронизация команд
         try:
