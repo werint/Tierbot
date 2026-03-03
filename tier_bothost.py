@@ -4,7 +4,7 @@ from discord import app_commands, ui
 import asyncio
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 
 print("🚀 Запуск бота на Railway...")
@@ -16,7 +16,6 @@ CATEGORY_ID = 1381679976486539334
 LOG_CHANNEL_ID = 1448991378750046209
 WARN_CHANNEL_ID = 1470220017403433056  # Канал для заявок на снятие варнов
 ALLOWED_ROLE_IDS = [1310673963000528949, 1381682246678741022, 1223589384452833290]  # Роли с доступом к командам
-TRIGGER_ROLE_ID = 1478205318591938671  # Роль, которая может добавлять людей в капт
 TOKEN = os.getenv('DISCORD_TOKEN')
 
 if not TOKEN:
@@ -28,9 +27,6 @@ print("✅ Токен найден, запускаем бота...")
 # Глобальные переменные для rate limiting
 last_request_time = 0
 MIN_REQUEST_INTERVAL = 1.0  # Минимальное время между запросами (секунды)
-
-# Хранилище активных capt списков
-active_capt_lists = {}
 
 async def safe_request(coroutine, retries=3, delay=2):
     """Безопасное выполнение запроса с повторными попытками"""
@@ -96,159 +92,6 @@ def has_allowed_role():
         return has_role
     
     return app_commands.check(predicate)
-
-# ===================== КЛАСС ДЛЯ CAPT СПИСКОВ =====================
-
-class CaptListManager:
-    """Класс для управления списком на капт"""
-    
-    def __init__(self, message: discord.Message, creator: discord.User):
-        self.message = message
-        self.creator = creator
-        self.start_time = datetime.now()
-        self.end_time = self.start_time + timedelta(hours=1)
-        self.is_active = True
-        self.last_update = time.time()
-        self.registered_users = set()  # Множество ID пользователей в списке
-        self.cached_messages = {}  # Кэш сообщений: {message_id: author_id}
-        
-    async def update_list(self):
-        """Обновляет список участников с оптимизацией запросов"""
-        if not self.is_active:
-            return False
-        
-        # Проверяем, не прошло ли 10 секунд с последнего обновления
-        current_time = time.time()
-        if current_time - self.last_update < 10:
-            return False
-        
-        # Проверяем, не истек ли час
-        if datetime.now() >= self.end_time:
-            self.is_active = False
-            await self.finalize_list()
-            return False
-        
-        try:
-            # Получаем канал
-            channel = self.message.channel
-            role = channel.guild.get_role(TRIGGER_ROLE_ID)
-            
-            if not role:
-                print(f"⚠️ Роль {TRIGGER_ROLE_ID} не найдена")
-                return False
-            
-            # Получаем только последние 30 сообщений (уменьшаем нагрузку)
-            new_users = set()
-            
-            async for msg in channel.history(limit=30):
-                if msg.author.bot:
-                    continue
-                
-                # Кэшируем автора сообщения
-                self.cached_messages[msg.id] = msg.author.id
-                
-                # Проверяем, есть ли у сообщения реакции от нужной роли
-                has_valid_reaction = False
-                
-                for reaction in msg.reactions:
-                    if reaction.emoji == "✅":
-                        # Проверяем только первого пользователя с реакцией
-                        try:
-                            async for user in reaction.users(limit=2):  # Ограничиваем до 2 пользователей
-                                if not user.bot:
-                                    member = channel.guild.get_member(user.id)
-                                    if member and role in member.roles:
-                                        has_valid_reaction = True
-                                        break
-                            if has_valid_reaction:
-                                break
-                        except discord.errors.HTTPException:
-                            continue
-                
-                if has_valid_reaction:
-                    new_users.add(msg.author.id)
-            
-            # Проверяем изменения
-            if new_users != self.registered_users:
-                self.registered_users = new_users
-                await self.update_embed()
-                self.last_update = current_time
-                
-        except Exception as e:
-            print(f"Ошибка при обновлении capt списка: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        return True
-    
-    async def update_embed(self):
-        """Обновляет embed с новым списком"""
-        try:
-            # Получаем только упоминания пользователей
-            user_mentions = []
-            for user_id in self.registered_users:
-                user = self.message.guild.get_member(user_id)
-                if user:
-                    user_mentions.append(user.mention)
-            
-            if not user_mentions:
-                user_list = "Пока никого нет"
-            else:
-                # Сортируем по алфавиту
-                user_mentions.sort()
-                user_list = "\n".join(user_mentions)
-            
-            # Создаем новый embed без лишней информации
-            embed = discord.Embed(
-                title=f"📋 Список на капт • {len(self.registered_users)} участников",
-                description=user_list,
-                color=0x00ff00,
-                timestamp=datetime.now()
-            )
-            
-            embed.set_footer(text=f"ID: {self.creator.id} • Обновлено")
-            
-            await safe_request(self.message.edit(embed=embed))
-            
-        except Exception as e:
-            print(f"Ошибка при обновлении embed: {e}")
-    
-    async def finalize_list(self):
-        """Финальное обновление списка после часа"""
-        try:
-            # Получаем только упоминания пользователей
-            user_mentions = []
-            for user_id in self.registered_users:
-                user = self.message.guild.get_member(user_id)
-                if user:
-                    user_mentions.append(user.mention)
-            
-            if not user_mentions:
-                user_list = "Никто не участвовал"
-            else:
-                user_mentions.sort()
-                user_list = "\n".join(user_mentions)
-            
-            # Создаем финальный embed
-            embed = discord.Embed(
-                title=f"📋 Список на капт (ЗАВЕРШЕН) • {len(self.registered_users)} участников",
-                description=user_list,
-                color=0xff0000,
-                timestamp=datetime.now()
-            )
-            
-            embed.set_footer(text=f"Активность: 1 час • {datetime.now().strftime('%d.%m.%Y %H:%M')}")
-            
-            await safe_request(self.message.edit(embed=embed))
-            
-            # Удаляем из активных списков
-            if self.message.id in active_capt_lists:
-                del active_capt_lists[self.message.id]
-                
-            print(f"✅ Capt список {self.message.id} завершен")
-            
-        except Exception as e:
-            print(f"Ошибка при финализации списка: {e}")
 
 # ===================== КЛАССЫ ДЛЯ WARN ЗАЯВОК =====================
 
@@ -945,58 +788,6 @@ class ApplicationView(discord.ui.View):
 
 # ===================== КОМАНДЫ =====================
 
-@bot.tree.command(name="capt", description="Создать список на капт (обновляется раз в 10 секунд)")
-@has_allowed_role()
-async def create_capt_list(interaction: discord.Interaction):
-    """Создает список на капт, который обновляется раз в 10 секунд"""
-    try:
-        # Создаем начальный embed
-        embed = discord.Embed(
-            title="📋 Список на капт • 0 участников",
-            description="Пока никого нет",
-            color=0x00ff00,
-            timestamp=datetime.now()
-        )
-        
-        embed.set_footer(text=f"ID: {interaction.user.id} • Создано")
-        
-        # Отправляем сообщение
-        await interaction.response.send_message(embed=embed)
-        message = await interaction.original_response()
-        
-        # Создаем менеджер списка
-        capt_manager = CaptListManager(message, interaction.user)
-        active_capt_lists[message.id] = capt_manager
-        
-        # Запускаем фоновую задачу для обновления
-        async def update_loop():
-            while capt_manager.is_active:
-                try:
-                    await capt_manager.update_list()
-                    await asyncio.sleep(10)  # Обновление каждые 10 секунд
-                except Exception as e:
-                    print(f"Ошибка в цикле обновления capt списка: {e}")
-                    await asyncio.sleep(10)
-        
-        bot.loop.create_task(update_loop())
-        
-        # Логируем создание списка
-        await send_log(
-            "📋 Список на капт создан",
-            interaction.user,
-            f"Список создан в канале: {interaction.channel.mention}",
-            fields=[
-                ("👤 Создатель", f"{interaction.user.mention} ({interaction.user.id})"),
-                ("⏰ Длительность", "1 час"),
-                ("🔄 Обновление", "Каждые 10 секунд"),
-                ("#️⃣ Сообщение", f"[Перейти к списку]({message.jump_url})")
-            ]
-        )
-        
-    except Exception as e:
-        print(f"Ошибка команды capt: {e}")
-        await interaction.response.send_message("❌ Ошибка создания списка на капт", ephemeral=True)
-
 @bot.tree.command(name="warn", description="Создать панель заявок на снятие варна")
 @has_allowed_role()
 async def create_warn_panel(interaction: discord.Interaction):
@@ -1099,7 +890,6 @@ async def bot_status(interaction: discord.Interaction):
         embed.add_field(name="📨 Категория заявок", value=f"```ID: {CATEGORY_ID}```", inline=True)
         embed.add_field(name="📋 Канал логов", value=f"```ID: {LOG_CHANNEL_ID}```", inline=True)
         embed.add_field(name="⚠️ Канал варнов", value=f"```ID: {WARN_CHANNEL_ID}```", inline=True)
-        embed.add_field(name="🎯 Роль триггер", value=f"```ID: {TRIGGER_ROLE_ID}```", inline=True)
         
         # Информация о гильдии
         guild = interaction.guild
@@ -1129,8 +919,8 @@ async def bot_status(interaction: discord.Interaction):
             pass
         
         embed.add_field(
-            name="📊 Активные", 
-            value=f"```Tier: {tier_count} | Warn: {warn_count} | Capt: {len(active_capt_lists)}```", 
+            name="📊 Активные заявки", 
+            value=f"```Tier: {tier_count} | Warn: {warn_count}```", 
             inline=False
         )
         
@@ -1200,56 +990,11 @@ async def on_command_error(ctx, error):
     print(f"Ошибка команды: {error}")
 
 @bot.event
-async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
-    """Обрабатывает добавление реакции"""
-    if payload.emoji.name != "✅":
-        return
-    
-    # Проверяем, есть ли активный capt список в этом канале
-    channel = bot.get_channel(payload.channel_id)
-    if not channel:
-        return
-    
-    # Ищем активные списки в этом канале
-    for capt_list in active_capt_lists.values():
-        if capt_list.message.channel.id == payload.channel_id and capt_list.is_active:
-            # Обновляем только если прошло достаточно времени
-            if time.time() - capt_list.last_update >= 5:
-                async def delayed_update():
-                    await asyncio.sleep(2)  # Увеличиваем задержку до 2 секунд
-                    await capt_list.update_list()
-                bot.loop.create_task(delayed_update())
-            break
-
-@bot.event
-async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
-    """Обрабатывает удаление реакции"""
-    if payload.emoji.name != "✅":
-        return
-    
-    # Проверяем, есть ли активный capt список в этом канале
-    channel = bot.get_channel(payload.channel_id)
-    if not channel:
-        return
-    
-    # Ищем активные списки в этом канале
-    for capt_list in active_capt_lists.values():
-        if capt_list.message.channel.id == payload.channel_id and capt_list.is_active:
-            # Обновляем только если прошло достаточно времени
-            if time.time() - capt_list.last_update >= 5:
-                async def delayed_update():
-                    await asyncio.sleep(2)  # Увеличиваем задержку до 2 секунд
-                    await capt_list.update_list()
-                bot.loop.create_task(delayed_update())
-            break
-
-@bot.event
 async def on_ready():
     print(f'✅ Бот {bot.user} успешно запущен на Railway!')
     print(f'📨 Категория для заявок: {CATEGORY_ID}')
     print(f'📋 Канал для логов: {LOG_CHANNEL_ID}')
     print(f'⚠️ Канал для заявок на варны: {WARN_CHANNEL_ID}')
-    print(f'🎯 Роль для капт триггера: {TRIGGER_ROLE_ID}')
     print(f'🎯 Разрешенные роли для команд: {ALLOWED_ROLE_IDS}')
     
     try:
@@ -1259,7 +1004,6 @@ async def on_ready():
         bot.add_view(WarnApplicationView())
         
         # Важно: регистрируем WarnModerationView как persistent view
-        # Для этого создаем экземпляр с дефолтными значениями и добавляем его
         bot.add_view(WarnModerationView(0, "", "", ""))
         
         print('✅ Все persistent views зарегистрированы')
