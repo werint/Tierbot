@@ -110,9 +110,10 @@ class CaptListManager:
         self.is_active = True
         self.last_update = time.time()
         self.registered_users = set()  # Множество ID пользователей в списке
+        self.last_message_id = None  # ID последнего обработанного сообщения
         
     async def update_list(self):
-        """Обновляет список участников"""
+        """Обновляет список участников с оптимизацией запросов"""
         if not self.is_active:
             return False
         
@@ -139,23 +140,61 @@ class CaptListManager:
                 print(f"⚠️ Роль {TRIGGER_ROLE_ID} не найдена")
                 return False
             
-            # Проходим по всем сообщениям в канале (последние 200)
-            async for msg in channel.history(limit=200):
+            # Проходим по сообщениям, начиная с последнего
+            async for msg in channel.history(limit=100, after=self.last_message_id):
                 if msg.author.bot:
                     continue
                 
                 # Проверяем каждую реакцию на сообщении
                 for reaction in msg.reactions:
                     if reaction.emoji == "✅":  # Только реакции с галочкой
-                        # Проверяем, кто поставил эту реакцию
-                        async for user in reaction.users():
-                            if not user.bot:
-                                member = channel.guild.get_member(user.id)
-                                # Если реакцию поставил человек с нужной ролью
-                                if member and role in member.roles:
-                                    # Добавляем АВТОРА сообщения в список
-                                    new_users.add(msg.author.id)
-                                    break  # Достаточно одной реакции от нужной роли
+                        # Проверяем, кто поставил эту реакцию с ограничением количества запросов
+                        try:
+                            async for user in reaction.users(limit=10):  # Ограничиваем до 10 пользователей
+                                if not user.bot:
+                                    member = channel.guild.get_member(user.id)
+                                    # Если реакцию поставил человек с нужной ролью
+                                    if member and role in member.roles:
+                                        # Добавляем АВТОРА сообщения в список
+                                        new_users.add(msg.author.id)
+                                        break  # Достаточно одной реакции от нужной роли
+                        except discord.errors.HTTPException as e:
+                            if e.status == 429:
+                                print(f"⚠️ Rate limit при получении реакций, пропускаем сообщение {msg.id}")
+                                continue
+                            else:
+                                raise
+                
+                # Обновляем последнее обработанное сообщение
+                self.last_message_id = msg.id
+                
+                # Добавляем небольшую задержку между запросами
+                await asyncio.sleep(0.5)
+            
+            # Также проверяем изменения в уже обработанных сообщениях (удаление реакций)
+            if len(new_users) < len(self.registered_users):
+                # Если количество уменьшилось, нужно проверить все сообщения
+                async for msg in channel.history(limit=200):
+                    if msg.author.bot:
+                        continue
+                    
+                    # Проверяем, должен ли автор быть в списке
+                    should_be_in_list = False
+                    
+                    for reaction in msg.reactions:
+                        if reaction.emoji == "✅":
+                            try:
+                                async for user in reaction.users(limit=10):
+                                    if not user.bot:
+                                        member = channel.guild.get_member(user.id)
+                                        if member and role in member.roles:
+                                            should_be_in_list = True
+                                            break
+                            except discord.errors.HTTPException:
+                                continue
+                    
+                    if should_be_in_list:
+                        new_users.add(msg.author.id)
             
             # Проверяем изменения
             if new_users != self.registered_users:
@@ -1200,12 +1239,12 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     # Ищем активные списки в этом канале
     for capt_list in active_capt_lists.values():
         if capt_list.message.channel.id == payload.channel_id and capt_list.is_active:
-            # Запускаем обновление с небольшой задержкой
-            async def delayed_update():
-                await asyncio.sleep(1)  # Ждем 1 секунду для обработки всех событий
-                await capt_list.update_list()
-            
-            bot.loop.create_task(delayed_update())
+            # Обновляем только если прошло достаточно времени
+            if time.time() - capt_list.last_update >= 3:
+                async def delayed_update():
+                    await asyncio.sleep(1)
+                    await capt_list.update_list()
+                bot.loop.create_task(delayed_update())
             break
 
 @bot.event
@@ -1222,12 +1261,12 @@ async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
     # Ищем активные списки в этом канале
     for capt_list in active_capt_lists.values():
         if capt_list.message.channel.id == payload.channel_id and capt_list.is_active:
-            # Запускаем обновление с небольшой задержкой
-            async def delayed_update():
-                await asyncio.sleep(1)  # Ждем 1 секунду для обработки всех событий
-                await capt_list.update_list()
-            
-            bot.loop.create_task(delayed_update())
+            # Обновляем только если прошло достаточно времени
+            if time.time() - capt_list.last_update >= 3:
+                async def delayed_update():
+                    await asyncio.sleep(1)
+                    await capt_list.update_list()
+                bot.loop.create_task(delayed_update())
             break
 
 @bot.event
@@ -1244,9 +1283,6 @@ async def on_ready():
         bot.add_view(ApplicationView())
         bot.add_view(ModerationView(0, 0, "", "", "", "", ""))
         bot.add_view(WarnApplicationView())
-        
-        # Важно: регистрируем WarnModerationView как persistent view
-        # Для этого создаем экземпляр с дефолтными значениями и добавляем его
         bot.add_view(WarnModerationView(0, "", "", ""))
         
         print('✅ Все persistent views зарегистрированы')
