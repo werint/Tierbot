@@ -116,9 +116,9 @@ class CaptListManager:
         if not self.is_active:
             return False
         
-        # Проверяем, не прошло ли 2 секунды с последнего обновления
+        # Проверяем, не прошло ли 5 секунд с последнего обновления
         current_time = time.time()
-        if current_time - self.last_update < 2:
+        if current_time - self.last_update < 5:
             return False
         
         # Проверяем, не истек ли час
@@ -171,12 +171,12 @@ class CaptListManager:
     async def update_embed(self):
         """Обновляет embed с новым списком"""
         try:
-            # Получаем имена пользователей
+            # Получаем только упоминания пользователей
             user_mentions = []
             for user_id in self.registered_users:
                 user = self.message.guild.get_member(user_id)
                 if user:
-                    user_mentions.append(f"{user.mention} (`{user.name}`)")
+                    user_mentions.append(user.mention)
             
             if not user_mentions:
                 user_list = "Пока никого нет"
@@ -185,18 +185,12 @@ class CaptListManager:
                 user_mentions.sort()
                 user_list = "\n".join(user_mentions)
             
-            # Создаем новый embed
+            # Создаем новый embed без лишней информации
             embed = discord.Embed(
-                title="📋 Список на капт",
-                description=f"**Создатель:** {self.creator.mention}\n**Обновляется каждые 2 секунды**\n**До окончания:** {discord.utils.format_dt(self.end_time, 'R')}",
+                title=f"📋 Список на капт • {len(self.registered_users)} участников",
+                description=user_list,
                 color=0x00ff00,
                 timestamp=datetime.now()
-            )
-            
-            embed.add_field(
-                name=f"👥 Участники ({len(self.registered_users)})",
-                value=user_list[:1024] if len(user_list) > 1024 else user_list,
-                inline=False
             )
             
             embed.set_footer(text=f"ID: {self.creator.id} • Обновлено")
@@ -209,12 +203,12 @@ class CaptListManager:
     async def finalize_list(self):
         """Финальное обновление списка после часа"""
         try:
-            # Получаем имена пользователей
+            # Получаем только упоминания пользователей
             user_mentions = []
             for user_id in self.registered_users:
                 user = self.message.guild.get_member(user_id)
                 if user:
-                    user_mentions.append(f"{user.mention} (`{user.name}`)")
+                    user_mentions.append(user.mention)
             
             if not user_mentions:
                 user_list = "Никто не участвовал"
@@ -224,16 +218,10 @@ class CaptListManager:
             
             # Создаем финальный embed
             embed = discord.Embed(
-                title="📋 Список на капт (ЗАВЕРШЕН)",
-                description=f"**Создатель:** {self.creator.mention}\n**Список больше не обновляется**",
+                title=f"📋 Список на капт (ЗАВЕРШЕН) • {len(self.registered_users)} участников",
+                description=user_list,
                 color=0xff0000,
                 timestamp=datetime.now()
-            )
-            
-            embed.add_field(
-                name=f"👥 Итоговые участники ({len(self.registered_users)})",
-                value=user_list[:1024] if len(user_list) > 1024 else user_list,
-                inline=False
             )
             
             embed.set_footer(text=f"Активность: 1 час • {datetime.now().strftime('%d.%m.%Y %H:%M')}")
@@ -944,23 +932,17 @@ class ApplicationView(discord.ui.View):
 
 # ===================== КОМАНДЫ =====================
 
-@bot.tree.command(name="capt", description="Создать список на капт (обновляется каждые 2 секунды)")
+@bot.tree.command(name="capt", description="Создать список на капт (обновляется раз в 5 секунд)")
 @has_allowed_role()
 async def create_capt_list(interaction: discord.Interaction):
-    """Создает список на капт, который обновляется каждые 2 секунды"""
+    """Создает список на капт, который обновляется раз в 5 секунд"""
     try:
         # Создаем начальный embed
         embed = discord.Embed(
-            title="📋 Список на капт",
-            description=f"**Создатель:** {interaction.user.mention}\n**Обновляется каждые 2 секунды**\n**До окончания:** <t:{int((datetime.now() + timedelta(hours=1)).timestamp())}:R>",
+            title="📋 Список на капт • 0 участников",
+            description="Пока никого нет",
             color=0x00ff00,
             timestamp=datetime.now()
-        )
-        
-        embed.add_field(
-            name="👥 Участники (0)",
-            value="Пока никого нет",
-            inline=False
         )
         
         embed.set_footer(text=f"ID: {interaction.user.id} • Создано")
@@ -978,7 +960,7 @@ async def create_capt_list(interaction: discord.Interaction):
             while capt_manager.is_active:
                 try:
                     await capt_manager.update_list()
-                    await asyncio.sleep(2)  # Обновление каждые 2 секунды
+                    await asyncio.sleep(5)  # Обновление каждые 5 секунд
                 except Exception as e:
                     print(f"Ошибка в цикле обновления capt списка: {e}")
                     await asyncio.sleep(5)
@@ -993,7 +975,7 @@ async def create_capt_list(interaction: discord.Interaction):
             fields=[
                 ("👤 Создатель", f"{interaction.user.mention} ({interaction.user.id})"),
                 ("⏰ Длительность", "1 час"),
-                ("🔄 Обновление", "Каждые 2 секунды"),
+                ("🔄 Обновление", "Каждые 5 секунд"),
                 ("#️⃣ Сообщение", f"[Перейти к списку]({message.jump_url})")
             ]
         )
