@@ -110,7 +110,8 @@ class CaptListManager:
         self.is_active = True
         self.last_update = time.time()
         self.registered_users = set()  # Множество ID пользователей в списке
-        self.processed_message_ids = set()  # Множество ID обработанных сообщений
+        self.cached_messages = {}  # Кэш сообщений: {message_id: author_id}
+        self.last_message_id = None  # ID последнего обработанного сообщения
         
     async def update_list(self):
         """Обновляет список участников с оптимизацией запросов"""
@@ -131,65 +132,45 @@ class CaptListManager:
         try:
             # Получаем канал
             channel = self.message.channel
-            
-            # Собираем всех пользователей, на чьи сообщения есть реакции от людей с нужной ролью
-            new_users = set()
             role = channel.guild.get_role(TRIGGER_ROLE_ID)
             
             if not role:
                 print(f"⚠️ Роль {TRIGGER_ROLE_ID} не найдена")
                 return False
             
-            # Сначала проверяем новые сообщения (последние 50)
+            # Получаем только новые сообщения (последние 50)
+            new_users = set(self.registered_users)  # Копируем текущий список
+            
+            # Проверяем новые сообщения
             async for msg in channel.history(limit=50):
                 if msg.author.bot:
                     continue
                 
-                # Добавляем ID сообщения в обработанные
-                self.processed_message_ids.add(msg.id)
+                # Кэшируем автора сообщения
+                self.cached_messages[msg.id] = msg.author.id
                 
-                # Проверяем каждую реакцию на сообщении
-                for reaction in msg.reactions:
-                    if reaction.emoji == "✅":  # Только реакции с галочкой
-                        # Проверяем, кто поставил эту реакцию с ограничением количества запросов
-                        try:
-                            async for user in reaction.users(limit=10):  # Ограничиваем до 10 пользователей
-                                if not user.bot:
-                                    member = channel.guild.get_member(user.id)
-                                    # Если реакцию поставил человек с нужной ролью
-                                    if member and role in member.roles:
-                                        # Добавляем АВТОРА сообщения в список
-                                        new_users.add(msg.author.id)
-                                        break  # Достаточно одной реакции от нужной роли
-                        except discord.errors.HTTPException as e:
-                            if e.status == 429:
-                                print(f"⚠️ Rate limit при получении реакций, пропускаем сообщение {msg.id}")
-                                continue
-                            else:
-                                raise
-            
-            # Проверяем только последние 100 сообщений на удаление реакций
-            async for msg in channel.history(limit=100):
-                if msg.author.bot or msg.id not in self.processed_message_ids:
-                    continue
-                
-                # Проверяем, есть ли у сообщения реакция от нужной роли
+                # Проверяем, есть ли у сообщения реакции от нужной роли
                 has_valid_reaction = False
                 
                 for reaction in msg.reactions:
                     if reaction.emoji == "✅":
+                        # Проверяем только первого пользователя с реакцией
                         try:
-                            async for user in reaction.users(limit=10):
+                            async for user in reaction.users(limit=3):  # Ограничиваем до 3 пользователей
                                 if not user.bot:
                                     member = channel.guild.get_member(user.id)
                                     if member and role in member.roles:
                                         has_valid_reaction = True
                                         break
+                            if has_valid_reaction:
+                                break
                         except discord.errors.HTTPException:
                             continue
                 
                 if has_valid_reaction:
                     new_users.add(msg.author.id)
+                else:
+                    new_users.discard(msg.author.id)
             
             # Проверяем изменения
             if new_users != self.registered_users:
