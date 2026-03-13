@@ -605,7 +605,7 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
             await asyncio.sleep(0.5)
             await safe_request(channel.send(embed=embed, view=view))
             await asyncio.sleep(0.5)
-            await safe_request(channel.send(f"👤 Заявитель: {interaction.user.mention}"))
+            await safe_request(channel.send(f"👤 Заявитель: {interaction.user.mention} <@&1481606198460551259>"))
             
             await interaction.followup.send(f'✅ Ваша заявка создана! Перейдите в {channel.mention}', ephemeral=True)
             
