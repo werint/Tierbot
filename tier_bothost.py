@@ -558,6 +558,8 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
                 return
 
             channel_name = f"tier-{interaction.user.display_name}"[:100]
+            
+            # Создаем переопределения прав с добавлением специальной роли
             overwrites = {
                 interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
                 interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
@@ -568,6 +570,11 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
             for role in interaction.guild.roles:
                 if role.permissions.administrator or role.permissions.manage_messages:
                     overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            
+            # Добавляем права для специальной роли 1501905377514488039
+            special_role = interaction.guild.get_role(1501905377514488039)
+            if special_role:
+                overwrites[special_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
             channel = await safe_request(category.create_text_channel(
                 name=channel_name,
