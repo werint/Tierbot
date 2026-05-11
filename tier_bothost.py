@@ -842,7 +842,6 @@ async def create_warn_panel(interaction: discord.Interaction):
 @bot.tree.command(name="заявка", description="Создать панель заявок на Tier")
 @has_allowed_role()
 async def create_application_panel(interaction: discord.Interaction):
-    """Создает панель заявок на Tier"""
     try:
         view = ApplicationView()
         embed = discord.Embed(
@@ -853,7 +852,8 @@ async def create_application_panel(interaction: discord.Interaction):
         embed.add_field(name="📋 Формат", value="```Имя Фамилия | Статический ID\nПример: Skeet Amnyam | 2253```", inline=False)
         embed.add_field(name="📝 Требования", value="""
 > ✵ **10 скринов** с 50+ киллов (imgur/ibb)
-> ✵ **2 видео с арены** - полные 10-минутные (тяжка/спешик + сайга)
+> ✵ **2 видео с арены** - полные 10-минутные (тяжка/спешик + сайга) 
+> ✵ **Карта:** Ангар, минимум 7 человек в лобби 
 > ✵ **Откаты с залазами** - [ССЫЛКА НА ЗАЛАЗЫ](https://docs.google.com/spreadsheets/d/1RWonpmIXoq5I80yqOcQ5X2OqyEzDuL-vXDXn9zQNAAM/edit?gid=2141313289#gid=2141313289)
 > -> 1 6 7 10 15 - **Церовкь**
 > -> 1 2 11 - **Завод** 
@@ -868,7 +868,6 @@ async def create_application_panel(interaction: discord.Interaction):
         
         await interaction.response.send_message(embed=embed, view=view)
         
-        # Логируем создание панели
         await send_log(
             "📋 Панель заявок создана",
             interaction.user,
@@ -883,7 +882,6 @@ async def create_application_panel(interaction: discord.Interaction):
 @bot.tree.command(name="статус", description="Показать статус бота")
 @has_allowed_role()
 async def bot_status(interaction: discord.Interaction):
-    """Показывает статус бота (только для разрешенных ролей)"""
     try:
         embed = discord.Embed(
             title="📊 Статус бота",
