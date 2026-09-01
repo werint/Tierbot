@@ -6,6 +6,7 @@ import os
 import sys
 from datetime import datetime
 import time
+import traceback
 
 print("🚀 Запуск бота на Railway...")
 
@@ -197,6 +198,7 @@ class WarnApplicationModal(ui.Modal, title='Заявка на снятие ва�
             
         except Exception as e:
             print(f"Ошибка при создании заявки на варн: {e}")
+            traceback.print_exc()
             try:
                 await interaction.followup.send('❌ Ошибка при отправке заявки.', ephemeral=True)
             except:
@@ -305,12 +307,14 @@ class WarnModerationView(discord.ui.View):
                     pass
             else:
                 print(f"Ошибка при принятии заявки: {e}")
+                traceback.print_exc()
                 try:
                     await interaction.followup.send("❌ Ошибка при обработке заявки.", ephemeral=True)
                 except:
                     pass
         except Exception as e:
             print(f"Другая ошибка при принятии заявки: {e}")
+            traceback.print_exc()
             try:
                 await interaction.followup.send("❌ Ошибка при обработке заявки.", ephemeral=True)
             except:
@@ -349,12 +353,14 @@ class WarnModerationView(discord.ui.View):
                     pass
             else:
                 print(f"Ошибка при открытии модального окна: {e}")
+                traceback.print_exc()
                 try:
                     await interaction.response.send_message("❌ Ошибка при открытии формы.", ephemeral=True)
                 except:
                     pass
         except Exception as e:
             print(f"Другая ошибка при открытии модального окна: {e}")
+            traceback.print_exc()
             try:
                 await interaction.response.send_message("❌ Ошибка при открытии формы.", ephemeral=True)
             except:
@@ -458,6 +464,7 @@ class WarnRejectModal(ui.Modal, title='Укажите причину отказ�
             
         except Exception as e:
             print(f"Ошибка при обработке отклонения заявки: {e}")
+            traceback.print_exc()
             try:
                 await interaction.followup.send("❌ Ошибка при обработке заявки.", ephemeral=True)
             except:
@@ -485,18 +492,20 @@ class WarnApplicationView(discord.ui.View):
                     pass
             else:
                 print(f"Ошибка при открытии модального окна для варна: {e}")
+                traceback.print_exc()
                 try:
                     await interaction.response.send_message('❌ Ошибка открытия формы.', ephemeral=True)
                 except:
                     pass
         except Exception as e:
             print(f"Другая ошибка при открытии модального окна для варна: {e}")
+            traceback.print_exc()
             try:
                 await interaction.response.send_message('❌ Ошибка открытия формы.', ephemeral=True)
             except:
                 pass
 
-# ===================== СУЩЕСТВУЮЩИЙ КОД (Tier Application) =====================
+# ===================== КЛАСС ДЛЯ TIER ЗАЯВКИ =====================
 
 class TierApplication(ui.Modal, title='Заявка на Tier'):
     def __init__(self):
@@ -642,6 +651,7 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
             
         except Exception as e:
             print(f"Ошибка при создании заявки: {e}")
+            traceback.print_exc()
             try:
                 await interaction.followup.send('❌ Ошибка при создании заявки.', ephemeral=True)
             except:
@@ -649,6 +659,7 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
 
     async def on_error(self, interaction: discord.Interaction, error: Exception):
         print(f"Ошибка в модальном окне: {error}")
+        traceback.print_exc()
         try:
             await interaction.response.send_message('❌ Ошибка при отправке заявки.', ephemeral=True)
         except:
@@ -706,6 +717,7 @@ class ModerationView(discord.ui.View):
                 print(f"⚠️ Rate limit при взятии на рассмотрение: {e}")
             else:
                 print(f"Ошибка при взятии на рассмотрение: {e}")
+                traceback.print_exc()
             await interaction.response.defer()
     
     @discord.ui.button(label="❌ Закрыть заявку", style=discord.ButtonStyle.danger, custom_id="close_application")
@@ -758,12 +770,14 @@ class ModerationView(discord.ui.View):
                     pass
             else:
                 print(f"Ошибка при закрытии заявки: {e}")
+                traceback.print_exc()
                 try:
                     await interaction.response.send_message("❌ Ошибка при закрытии заявки.", ephemeral=True)
                 except:
                     pass
         except Exception as e:
             print(f"Другая ошибка при закрытии заявки: {e}")
+            traceback.print_exc()
             try:
                 await interaction.response.send_message("❌ Ошибка при закрытии заявки.", ephemeral=True)
             except:
@@ -777,24 +791,9 @@ class ApplicationView(discord.ui.View):
     async def application_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             await interaction.response.send_modal(TierApplication())
-        except discord.errors.HTTPException as e:
-            if e.status == 429:
-                print(f"⚠️ Rate limit при открытии модального окна: {e}")
-                try:
-                    await interaction.response.send_message(
-                        "⚠️ Слишком много запросов. Пожалуйста, подождите несколько секунд.",
-                        ephemeral=True
-                    )
-                except:
-                    pass
-            else:
-                print(f"Ошибка при открытии модального окна: {e}")
-                try:
-                    await interaction.response.send_message('❌ Ошибка открытия формы.', ephemeral=True)
-                except:
-                    pass
         except Exception as e:
-            print(f"Другая ошибка при открытии модального окна: {e}")
+            print(f"❌ Ошибка при открытии модального окна: {e}")
+            traceback.print_exc()
             try:
                 await interaction.response.send_message('❌ Ошибка открытия формы.', ephemeral=True)
             except:
@@ -844,6 +843,7 @@ async def create_warn_panel(interaction: discord.Interaction):
         
     except Exception as e:
         print(f"Ошибка команды warn: {e}")
+        traceback.print_exc()
         await interaction.response.send_message("❌ Ошибка создания панели заявок на варн", ephemeral=True)
 
 @bot.tree.command(name="заявка", description="Создать панель заявок на Tier")
@@ -883,6 +883,7 @@ async def create_application_panel(interaction: discord.Interaction):
         
     except Exception as e:
         print(f"Ошибка команды заявка: {e}")
+        traceback.print_exc()
         await interaction.response.send_message("❌ Ошибка создания панели заявок", ephemeral=True)
 
 @bot.tree.command(name="статус", description="Показать статус бота")
@@ -941,6 +942,7 @@ async def bot_status(interaction: discord.Interaction):
         
     except Exception as e:
         print(f"Ошибка команды статус: {e}")
+        traceback.print_exc()
         await interaction.response.send_message("❌ Ошибка получения статуса", ephemeral=True)
 
 @bot.tree.command(name="очистить", description="Очистить указанное количество сообщений")
@@ -976,6 +978,7 @@ async def clear_messages(interaction: discord.Interaction, количество:
         
     except Exception as e:
         print(f"Ошибка команды очистить: {e}")
+        traceback.print_exc()
         await interaction.followup.send("❌ Ошибка при очистке сообщений", ephemeral=True)
 
 @bot.tree.error
@@ -989,6 +992,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         )
     else:
         print(f"Ошибка slash-команды: {error}")
+        traceback.print_exc()
         try:
             await interaction.response.send_message("❌ Произошла ошибка при выполнении команды", ephemeral=True)
         except:
@@ -999,9 +1003,11 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
     print(f"Ошибка команды: {error}")
+    traceback.print_exc()
 
 @bot.event
 async def on_ready():
+    await asyncio.sleep(3)  # Задержка при старте
     print(f'✅ Бот {bot.user} успешно запущен на Railway!')
     print(f'📨 Категория для заявок: {CATEGORY_ID}')
     print(f'📋 Канал для логов: {LOG_CHANNEL_ID}')
@@ -1013,13 +1019,12 @@ async def on_ready():
         bot.add_view(ApplicationView())
         bot.add_view(ModerationView(0, 0, "", "", "", "", ""))
         bot.add_view(WarnApplicationView())
-        
-        # Важно: регистрируем WarnModerationView как persistent view
         bot.add_view(WarnModerationView(0, "", "", ""))
         
         print('✅ Все persistent views зарегистрированы')
         
-        # Синхронизация команд
+        # Синхронизация команд с задержкой
+        await asyncio.sleep(2)
         try:
             synced = await bot.tree.sync()
             print(f'✅ Синхронизировано {len(synced)} команд')
@@ -1028,7 +1033,13 @@ async def on_ready():
             
     except Exception as e:
         print(f'❌ Ошибка views: {e}')
+        traceback.print_exc()
 
 if __name__ == "__main__":
     print("🔄 Запуск бота...")
-    bot.run(TOKEN)
+    try:
+        bot.run(TOKEN)
+    except Exception as e:
+        print(f"❌ Критическая ошибка: {e}")
+        traceback.print_exc()
+        sys.exit(1)
