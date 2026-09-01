@@ -501,44 +501,50 @@ class WarnApplicationView(discord.ui.View):
 class TierApplication(ui.Modal, title='Заявка на Tier'):
     def __init__(self):
         super().__init__()
-        self.nickname_value = ""
+        self.competitive_exp_value = ""
         self.screenshots_value = ""
         self.arena_videos_value = ""
         self.capt_videos_value = ""
         self.rp_mcl_videos_value = ""
     
-    nickname = ui.TextInput(
-        label='Никнейм | Статик ID',
-        placeholder='Пример: Skeet Amnyam | 2253',
-        max_length=50
+    competitive_exp = ui.TextInput(
+        label='Опыт в компетитиве',
+        placeholder='Напиши свой опыт в компетитиве. (за какие семьи на каком сервере играл капты мклы(число их тоже напиши), сколько времени и как оцениваешь свой уровень игры от 1 до 10)',
+        style=discord.TextStyle.paragraph,
+        max_length=500,
+        required=True
     )
     
     screenshots = ui.TextInput(
         label='10 скринов с 50+ киллов',
         placeholder='Ссылки на imgur/ibb (через запятую)',
         style=discord.TextStyle.paragraph,
-        max_length=1000
+        max_length=1000,
+        required=True
     )
     
     arena_videos = ui.TextInput(
         label='2 видео с арены (тяжка/спешик + сайга)',
         placeholder='Ссылки на 2 полных 10-минутных видео',
         style=discord.TextStyle.paragraph,
-        max_length=1000
+        max_length=1000,
+        required=True
     )
     
     capt_videos = ui.TextInput(
         label='Видео залазы',
         placeholder='Ссылки на видео',
         style=discord.TextStyle.paragraph,
-        max_length=1000
+        max_length=1000,
+        required=True
     )
     
     rp_mcl_videos = ui.TextInput(
         label='Капты откаты + MCL (по желанию)',
         placeholder='Сначала капты откаты, затем MCL если есть',
         style=discord.TextStyle.paragraph,
-        max_length=1500
+        max_length=1500,
+        required=False
     )
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -546,7 +552,7 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
             await interaction.response.defer(ephemeral=True)
             
             # Сохраняем значения
-            self.nickname_value = self.nickname.value
+            self.competitive_exp_value = self.competitive_exp.value
             self.screenshots_value = self.screenshots.value
             self.arena_videos_value = self.arena_videos.value
             self.capt_videos_value = self.capt_videos.value
@@ -592,7 +598,8 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
                 timestamp=discord.utils.utcnow()
             )
             
-            embed.add_field(name="👤 Игрок", value=f"```{self.nickname_value}```", inline=False)
+            embed.add_field(name="👤 Игрок", value=f"{interaction.user.mention}", inline=False)
+            embed.add_field(name="📝 Опыт в компетитиве", value=f"```{self.competitive_exp_value}```", inline=False)
             embed.add_field(name="📸 10 скринов с 50+ киллов", value=f"{self.screenshots_value[:500]}..." if len(self.screenshots_value) > 500 else self.screenshots_value, inline=False)
             embed.add_field(name="🎮 2 видео с арены", value=f"{self.arena_videos_value[:500]}..." if len(self.arena_videos_value) > 500 else self.arena_videos_value, inline=False)
             embed.add_field(name="⚔️ Видео залазы", value=f"{self.capt_videos_value[:500]}..." if len(self.capt_videos_value) > 500 else self.capt_videos_value, inline=False)
@@ -602,7 +609,7 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
             view = ModerationView(
                 applicant_id=interaction.user.id,
                 channel_id=channel.id,
-                nickname=self.nickname_value,
+                competitive_exp=self.competitive_exp_value,
                 screenshots=self.screenshots_value,
                 arena_videos=self.arena_videos_value,
                 capt_videos=self.capt_videos_value,
@@ -618,7 +625,7 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
             
             # Логируем создание заявки со всеми ссылками
             log_fields = [
-                ("🎯 Никнейм", f"`{self.nickname_value}`"),
+                ("📝 Опыт в компетитиве", f"`{self.competitive_exp_value}`"),
                 ("📸 Скрины (50+ киллов)", self.screenshots_value[:800] if self.screenshots_value else "Не указано"),
                 ("🎮 Видео арены", self.arena_videos_value[:800] if self.arena_videos_value else "Не указано"),
                 ("⚔️ Видео залазы", self.capt_videos_value[:800] if self.capt_videos_value else "Не указано"),
@@ -651,11 +658,11 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
                 pass
 
 class ModerationView(discord.ui.View):
-    def __init__(self, applicant_id, channel_id, nickname, screenshots, arena_videos, capt_videos, rp_mcl_videos):
+    def __init__(self, applicant_id, channel_id, competitive_exp, screenshots, arena_videos, capt_videos, rp_mcl_videos):
         super().__init__(timeout=None)
         self.applicant_id = applicant_id
         self.channel_id = channel_id
-        self.nickname = nickname
+        self.competitive_exp = competitive_exp
         self.screenshots = screenshots
         self.arena_videos = arena_videos
         self.capt_videos = capt_videos
@@ -682,7 +689,7 @@ class ModerationView(discord.ui.View):
             # Логируем взятие на рассмотрение
             log_fields = [
                 ("👤 Заявитель", f"<@{self.applicant_id}>"),
-                ("🎯 Никнейм", f"`{self.nickname}`"),
+                ("📝 Опыт в компетитиве", f"`{self.competitive_exp}`"),
                 ("📋 Взял на рассмотрение", f"{interaction.user.mention}"),
                 ("#️⃣ Канал", f"<#{self.channel_id}>")
             ]
@@ -720,7 +727,7 @@ class ModerationView(discord.ui.View):
             log_fields = [
                 ("🔒 Закрыл", f"{interaction.user.mention} ({interaction.user.id})"),
                 ("👤 Заявитель", f"<@{self.applicant_id}>"),
-                ("🎯 Никнейм", f"`{self.nickname}`"),
+                ("📝 Опыт в компетитиве", f"`{self.competitive_exp}`"),
                 ("📸 Скрины", self.screenshots[:800] if self.screenshots else "Не указано"),
                 ("🎮 Видео арены", self.arena_videos[:800] if self.arena_videos else "Не указано"),
                 ("⚔️ Видео залазов", self.capt_videos[:800] if self.capt_videos else "Не указано"),
@@ -849,7 +856,6 @@ async def create_application_panel(interaction: discord.Interaction):
             description="> Используй кнопку ниже чтобы отправить заявку на Tier",
             color=0x3498db
         )
-        embed.add_field(name="📋 Формат", value="```Имя Фамилия | Статический ID\nПример: Skeet Amnyam | 2253```", inline=False)
         embed.add_field(name="📝 Требования", value="""
 > ✵ **10 скринов** с 50+ киллов (imgur/ibb)
 > ✵ **2 видео с арены** - полные 10-минутные (тяжка/спешик + сайга) 
