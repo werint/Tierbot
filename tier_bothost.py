@@ -518,7 +518,7 @@ class TierApplication(ui.Modal, title='Заявка на Tier'):
     
     competitive_exp = ui.TextInput(
         label='Опыт в компетитиве',
-        placeholder='Напиши свой опыт в компетитиве. (за какие семьи на каком сервере играл капты мклы(число их тоже напиши), сколько времени и как оцениваешь свой уровень игры от 1 до 10)',
+        placeholder='опыт игры в общем опиши скок часов , скок каптов сыграл +-, опыт в семьях и какой тир у тебя был',
         style=discord.TextStyle.paragraph,
         max_length=500,
         required=True
