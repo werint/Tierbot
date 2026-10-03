@@ -869,7 +869,7 @@ async def create_application_panel(interaction: discord.Interaction):
 > -> 1 - **Яки** 
 > -> 9 5 - **Палето** 
 > -> 2 - **Дом Майкла**
-> ✵ **Капты и MCL откаты** - по желанию, повышает шанс на более высокий тир (YouTube/Rutube)""", inline=False)
+> ✵ **Капты и MCL откаты** - по желанию, повышает шанс на более высокий тир (ТОЛЬКО ЧЕРЕЗ ЮТУБ)""", inline=False)
         embed.set_image(url="https://media.discordapp.net/attachments/1354522711895834646/1444635751198490704/maxresdefault.jpg?ex=692d6d63&is=692c1be3&hm=08f0a3666648dd1694c65b536d0e82490e42ef31497d8ebbc9decb0fe5fa6cd3&=&format=webp")
         
         await interaction.response.send_message(embed=embed, view=view)
