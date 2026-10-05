@@ -858,7 +858,7 @@ async def create_application_panel(interaction: discord.Interaction):
         )
         embed.add_field(name="📝 Требования", value="""
 > ✵ **10 скринов** с 50+ киллов (imgur/ibb)
-> ✵ **2 видео с арены** - полные 10-минутные (тяжка/спешик + сайга) 
+> ✵ **2 видео с арены** - полные 10-минутные (тяжка/спешик + сайга, ТОЛЬКО ЧЕРЕЗ ЮТУБ) 
 > ✵ **Карта:** Ангар, минимум 7 человек в лобби 
 > ✵ **Откаты с залазами** - [ССЫЛКА НА ЗАЛАЗЫ](https://docs.google.com/spreadsheets/d/1RWonpmIXoq5I80yqOcQ5X2OqyEzDuL-vXDXn9zQNAAM/edit?gid=2141313289#gid=2141313289)
 > -> 1 6 7 10 15 - **Церовкь**
